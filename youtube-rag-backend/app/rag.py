@@ -5,12 +5,13 @@ from transformers import (
     pipeline,
     BitsAndBytesConfig
 )
-# from langchain_community.llms import HuggingFacePipeline
+
 from langchain_huggingface import HuggingFacePipeline
 from app.vectorstore import get_or_create_vectorstore
 def load_llm():
-    MODEL_ID = "Qwen/Qwen2.5-3B-Instruct"
-
+    # MODEL_ID = "Qwen/Qwen2.5-3B-Instruct"
+    # MODEL_ID = "Qwen/Qwen2.5-1.5B-Instruct"
+    MODEL_ID = "Qwen/Qwen2.5-0.5B-Instruct"
 
     tokenizer = AutoTokenizer.from_pretrained(MODEL_ID)
 
@@ -32,8 +33,9 @@ def load_llm():
         "text-generation",
         model=model,
         tokenizer=tokenizer,
-        max_new_tokens=256,
-        temperature=0.2
+        max_new_tokens=180,
+        temperature=0.1,
+        do_sample=False
     )
 
     return HuggingFacePipeline(pipeline=pipe)
@@ -43,16 +45,45 @@ llm = load_llm()
 from youtube_transcript_api import YouTubeTranscriptApi, TranscriptsDisabled
 from langchain_core.documents import Document
 
+from youtube_transcript_api import (
+    NoTranscriptFound,
+    TranscriptsDisabled,
+    VideoUnavailable
+)
+def normalize_transcript(transcript):
+    texts = []
+    for chunk in transcript:
+        if hasattr(chunk, "text"):
+            texts.append(chunk.text)
+        else:
+            texts.append(chunk["text"])
+    return " ".join(texts)
+
+
 def load_youtube_docs(video_id: str):
     try:
-        ytt_api = YouTubeTranscriptApi()
-        transcript = ytt_api.fetch(video_id, languages=["en"])
+        ytt = YouTubeTranscriptApi()
+        transcript = ytt.fetch(video_id, languages=["en"])
 
-        text = " ".join(chunk.text for chunk in transcript)
-        return [Document(page_content=text)]
 
-    except TranscriptsDisabled:
-        raise ValueError("Transcripts are disabled for this video.")
+    except (NoTranscriptFound, TranscriptsDisabled, VideoUnavailable):
+        try:
+            transcript_list = YouTubeTranscriptApi.list_transcripts(video_id)
+            for t in transcript_list:
+                if t.language_code.startswith("en"):
+                    transcript = t.fetch()
+                    break
+            else:
+                raise ValueError("No transcript available for this video")
+        except Exception:
+            raise ValueError(
+                "This video does not provide transcripts. "
+                "Try another video or one with captions enabled."
+            )
+
+    text = normalize_transcript(transcript)
+    return [Document(page_content=text)]
+
 
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 
@@ -117,11 +148,24 @@ Answer (concise and clear):
     return parallel_chain | prompt | llm | parser
 
 def ask_youtube_video(video_id, question):
+    print(" ask_youtube_video started")
+
+    print(" building / loading vectorstore")
     db = get_or_create_vectorstore(
-        video_id, 
+        video_id,
         docs_builder=lambda vid: split_documents(load_youtube_docs(vid))
     )
+
+    print(" vectorstore ready, creating retriever")
     retriever = db.as_retriever(search_kwargs={"k": 4})
+
+    print(" building RAG chain")
     chain = build_rag_chain(llm, retriever)
-    return chain.invoke(question)
+
+    print(" invoking chain")
+    result = chain.invoke(question)
+
+    print(" chain finished")
+    return result
+
 
