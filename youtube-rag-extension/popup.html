@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <link rel="stylesheet" href="popup.css" />
+</head>
+<body>
+  <div class="container">
+    <h1>YouTube RAG</h1>
+
+    <div id="status" class="status">
+      Ready
+    </div>
+
+    <textarea
+      id="question"
+      placeholder="Ask something about this video..."
+      rows="3"
+    ></textarea>
+
+    <button id="ask">Ask</button>
+
+    <div id="loader" class="loader hidden"></div>
+
+    <pre id="answer" class="answer"></pre>
+  </div>
+
+  <script src="popup.js"></script>
+</body>
+</html>

@@ -1,0 +1,9 @@
+transformers 
+accelerate 
+bitsandbytes 
+sentencepiece 
+youtube-transcript-api 
+langchain-community 
+langchain-huggingface
+faiss-cpu
+sentence-transformers
