@@ -9,39 +9,51 @@ from transformers import (
 from langchain_huggingface import HuggingFacePipeline
 from app.vectorstore import get_or_create_vectorstore
 
+# def load_llm():
+#     # Use at least 1.5B or 3B for better reasoning
+#     MODEL_ID = "Qwen/Qwen2.5-1.5B-Instruct"  # Changed from 0.5B
+    
+#     tokenizer = AutoTokenizer.from_pretrained(MODEL_ID)
+    
+#     quant_config = BitsAndBytesConfig(
+#         load_in_4bit=True,
+#         bnb_4bit_compute_dtype=torch.float16,
+#         bnb_4bit_use_double_quant=True,
+#         bnb_4bit_quant_type="nf4"
+#     )
+    
+#     model = AutoModelForCausalLM.from_pretrained(
+#         MODEL_ID,
+#         device_map="auto",
+#         quantization_config=quant_config,
+#         dtype=torch.float16
+#     )
+    
+#     pipe = pipeline(
+#         "text-generation",
+#         model=model,
+#         tokenizer=tokenizer,
+#         max_new_tokens=256,
+#         temperature=0.0,  # Changed to 0 for deterministic output
+#         do_sample=False,
+#         return_full_text=False
+#     )
+    
+#     return HuggingFacePipeline(pipeline=pipe)
+
+# llm = load_llm()
+
+from langchain_groq import ChatGroq
+
 def load_llm():
-    # Use at least 1.5B or 3B for better reasoning
-    MODEL_ID = "Qwen/Qwen2.5-1.5B-Instruct"  # Changed from 0.5B
-    
-    tokenizer = AutoTokenizer.from_pretrained(MODEL_ID)
-    
-    quant_config = BitsAndBytesConfig(
-        load_in_4bit=True,
-        bnb_4bit_compute_dtype=torch.float16,
-        bnb_4bit_use_double_quant=True,
-        bnb_4bit_quant_type="nf4"
+    return ChatGroq(
+        model="llama-3.1-8b-instant",
+        temperature=0,
+        max_tokens=150
     )
-    
-    model = AutoModelForCausalLM.from_pretrained(
-        MODEL_ID,
-        device_map="auto",
-        quantization_config=quant_config,
-        dtype=torch.float16
-    )
-    
-    pipe = pipeline(
-        "text-generation",
-        model=model,
-        tokenizer=tokenizer,
-        max_new_tokens=256,
-        temperature=0.0,  # Changed to 0 for deterministic output
-        do_sample=False,
-        return_full_text=False
-    )
-    
-    return HuggingFacePipeline(pipeline=pipe)
 
 llm = load_llm()
+
 
 from youtube_transcript_api import YouTubeTranscriptApi, TranscriptsDisabled
 from langchain_core.documents import Document

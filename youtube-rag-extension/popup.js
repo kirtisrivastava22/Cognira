@@ -115,7 +115,7 @@ function displayAnswer(data, videoId) {
   
   // Case 1: New format with structured response
   if (typeof data === 'object' && data.answer) {
-    answerText = String(data.answer);
+    answerText = String(data.answer.answer);
     timestamp = data.timestamp;
     timestampDisplay = data.timestamp_display;
     videoId = data.video_id || videoId;
