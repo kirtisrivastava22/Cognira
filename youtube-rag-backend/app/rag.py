@@ -49,7 +49,8 @@ def load_llm():
     return ChatGroq(
         model="llama-3.1-8b-instant",
         temperature=0,
-        max_tokens=150
+        max_tokens=150,
+        streaming=True 
     )
 
 llm = load_llm()
@@ -215,7 +216,7 @@ CRITICAL RULES:
 2. If the Context does not contain the answer, you MUST respond with exactly: "I don't know"
 3. Do NOT make up information
 4. Do NOT use knowledge outside the Context
-5. Keep answers concise (2-4 sentences maximum)
+5. Keep answers concise (2-6 sentences maximum)
 
 Context:
 {context}
@@ -276,7 +277,9 @@ def ask_youtube_video(video_id, question):
         }
     
     # Get earliest timestamp from retrieved context
-    ts = min(doc.metadata.get("start", 0) for doc in docs)
+    top_doc = docs[0]
+    ts = top_doc.metadata.get("start", 0)
+
     mm, ss = divmod(ts, 60)
     timestamp_str = f"{mm:02d}:{ss:02d}"
     
@@ -288,3 +291,4 @@ def ask_youtube_video(video_id, question):
         "timestamp_display": timestamp_str,
         "video_id": video_id
     }
+    
