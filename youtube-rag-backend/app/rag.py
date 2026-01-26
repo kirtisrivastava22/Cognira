@@ -35,7 +35,8 @@ def load_llm():
         tokenizer=tokenizer,
         max_new_tokens=180,
         temperature=0.1,
-        do_sample=False
+        do_sample=False,
+        return_full_text=False
     )
 
     return HuggingFacePipeline(pipeline=pipe)
