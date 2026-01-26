@@ -24,7 +24,11 @@ def ask(req: AskRequest):
         if not req.video_id or not req.question:
             raise HTTPException(status_code=400, detail="Missing fields")
         answer = ask_youtube_video(req.video_id, req.question)
-        return {"answer": answer}
+        return {
+            "answer": answer,
+            "video_id": req.video_id
+        }
+
         
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))

@@ -1,9 +1,21 @@
 {
   "manifest_version": 3,
-  "name": "YouTube RAG Assistant",
-  "version": "1.0",
-  "permissions": ["activeTab"],
+  "name": "YouTube RAG",
+  "version": "1.0.0",
+  "description": "Ask questions about YouTube videos using RAG",
+  "permissions": ["activeTab", "tabs"],
+  "host_permissions": ["https://www.youtube.com/*"],
   "action": {
-    "default_popup": "popup.html"
+    "default_popup": "popup.html",
+    "default_icon": {
+      "16": "youtube.png",
+      "48": "youtube.png",
+      "128": "youtube.png"
+    }
+  },
+  "icons": {
+    "16": "youtube.png",
+    "48": "youtube.png",
+    "128": "youtube.png"
   }
 }
