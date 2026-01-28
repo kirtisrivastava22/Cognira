@@ -4,10 +4,8 @@ const statusContainer = document.getElementById("status-container");
 const answerContainer = document.getElementById("answer-container");
 const tipsBox = document.getElementById("tips");
 
-// Focus input on popup open
 questionInput.focus();
 
-// Enter to submit (Shift+Enter = newline)
 questionInput.addEventListener("keydown", (e) => {
   if (e.key === "Enter" && !e.shiftKey) {
     e.preventDefault();
@@ -53,9 +51,6 @@ askBtn.onclick = async () => {
 
     statusContainer.innerHTML = "";
 
-    const reader = res.body.getReader();
-    const decoder = new TextDecoder();
-
     answerContainer.innerHTML = `
       <div class="answer-box">
         <div class="answer-header">
@@ -69,8 +64,11 @@ askBtn.onclick = async () => {
     const answerEl = document.getElementById("streamed-answer");
     const tsEl = document.getElementById("timestamp-container");
 
+    const reader = res.body.getReader();
+    const decoder = new TextDecoder("utf-8");
+
     let buffer = "";
-    let metadataParsed = false;
+    let answerText = "";
 
     while (true) {
       const { value, done } = await reader.read();
@@ -78,43 +76,59 @@ askBtn.onclick = async () => {
 
       buffer += decoder.decode(value, { stream: true });
 
-      // 🔥 Parse metadata FIRST
-      if (!metadataParsed && buffer.includes("\n---\n")) {
-        const [metaRaw, rest] = buffer.split("\n---\n");
-        buffer = rest;
-        metadataParsed = true;
+      const events = buffer.split("\n\n");
+      buffer = events.pop(); // keep incomplete chunk
 
-        try {
-          const meta = JSON.parse(metaRaw);
+      for (const event of events) {
+        if (!event.startsWith("data: ")) continue;
 
-          if (meta.timestamp !== null) {
-            tsEl.innerHTML = `
-              <a 
-                href="https://www.youtube.com/watch?v=${meta.video_id}&t=${meta.timestamp}s"
-                target="_blank"
-                class="timestamp-link"
-              >
-                ⏱ Jump to ${meta.timestamp_display}
-              </a>
-            `;
-          }
-        } catch (e) {
-          console.error("Failed to parse metadata", e);
+        const payload = JSON.parse(event.replace("data: ", ""));
+
+        if (payload.type === "status") {
+          showStatus("Generating answer...", false);
         }
-      }
 
-      // Stream answer text
-      if (metadataParsed && buffer) {
-        answerEl.textContent += buffer;
-        buffer = "";
+        if (payload.type === "timestamp") {
+          const { seconds, display } = payload.value;
+          tsEl.innerHTML = `
+          <button id="jump-btn" class="timestamp-link">
+            ⏱ Jump to ${display}
+          </button>
+        `;
+
+          document.getElementById("jump-btn").onclick = async () => {
+            const [tab] = await chrome.tabs.query({
+              active: true,
+              currentWindow: true,
+            });
+
+            chrome.scripting.executeScript({
+              target: { tabId: tab.id },
+              func: (time) => {
+                const video = document.querySelector("video");
+                if (video) {
+                  video.currentTime = time;
+                  video.play();
+                }
+              },
+              args: [seconds],
+            });
+          };
+        }
+        if (payload.type === "token") {
+          answerText += payload.value;
+          answerEl.textContent = answerText;
+        }
+
+        if (payload.type === "end") {
+          showStatus("", false);
+        }
       }
     }
 
   } catch (error) {
-    // showStatus("Backend not running on http://127.0.0.1:8000", true);
-    showStatus(error.message,true);
-    console.log(error);
-
+    showStatus("Backend not running on http://127.0.0.1:8000", true);
+    console.error(error);
 
     answerContainer.innerHTML = `
       <div class="answer-box">
@@ -133,10 +147,13 @@ askBtn.onclick = async () => {
 };
 
 function showStatus(message, isError = false) {
+  if (!message) {
+    statusContainer.innerHTML = "";
+    return;
+  }
+
   const className = isError ? "error" : "loading";
-  const icon = isError
-    ? "⚠️"
-    : `<div class="spinner"></div>`;
+  const icon = isError ? "⚠️" : `<div class="spinner"></div>`;
 
   statusContainer.innerHTML = `
     <div class="status-box ${className}">

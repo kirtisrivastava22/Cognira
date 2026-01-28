@@ -37,51 +37,64 @@ def ask(req: AskRequest):
 
 from fastapi.responses import StreamingResponse
 import json
+import time
 
 @app.post("/ask_stream")
 def ask_stream(req: AskRequest):
-    print("went", flush=True)
 
     def token_generator():
         print("generator started", flush=True)
 
-        # 🚀 SEND ACK IMMEDIATELY
-        yield json.dumps({"status": "started"}) + "\n"
+        # 1️⃣ ACK immediately
+        yield "data: " + json.dumps({"type": "status", "value": "started"}) + "\n\n"
 
         db = get_or_create_vectorstore(
             req.video_id,
             docs_builder=lambda vid: split_documents(load_youtube_docs(vid))
         )
-        
+
         if db is None:
-            yield json.dumps({
-                "answer": "I don't know. This video does not have usable transcripts."
-            })
+            yield "data: " + json.dumps({
+                "type": "answer",
+                "value": "I don't know. No transcript available."
+            }) + "\n\n"
             return
-        print("vector store created")
+
         retriever = db.as_retriever(search_kwargs={"k": 6})
         docs = retriever.invoke(req.question)
-        print("Retriver invoked")
-        
+
         if not docs:
-            yield json.dumps({"answer": "I don't know"})
+            yield "data: " + json.dumps({
+                "type": "answer",
+                "value": "I don't know"
+            }) + "\n\n"
             return
-        print("Docs to hai bhai")
-        top_doc = docs[0]
-        ts = top_doc.metadata.get("start", 0)
+
+        # 2️⃣ Timestamp first
+        ts = docs[0].metadata.get("start", 0)
         mm, ss = divmod(ts, 60)
 
-        yield json.dumps({
-            "timestamp": ts,
-            "timestamp_display": f"{mm:02d}:{ss:02d}"
-        }) + "\n---\n"
+        yield "data: " + json.dumps({
+            "type": "timestamp",
+            "value": {
+                "seconds": ts,
+                "display": f"{mm:02d}:{ss:02d}"
+            }
+        }) + "\n\n"
 
+        # 3️⃣ Stream tokens
         chain = build_rag_chain(llm, retriever)
-        print("chain build")
-        for chunk in chain.stream(req.question):
-            yield chunk
 
-        # ✅ END STREAM
-        yield "\n ... \n"
+        for token in chain.stream(req.question):
+            yield "data: " + json.dumps({
+                "type": "token",
+                "value": token
+            }) + "\n\n"
 
-    return StreamingResponse(token_generator(), media_type="text/plain")
+        # 4️⃣ End
+        yield "data: " + json.dumps({"type": "end"}) + "\n\n"
+
+    return StreamingResponse(
+        token_generator(),
+        media_type="text/event-stream"
+    )
