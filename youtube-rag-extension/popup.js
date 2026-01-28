@@ -111,8 +111,10 @@ askBtn.onclick = async () => {
     }
 
   } catch (error) {
-    console.error(error);
-    showStatus("Backend not running on http://127.0.0.1:8000", true);
+    // showStatus("Backend not running on http://127.0.0.1:8000", true);
+    showStatus(error.message,true);
+    console.log(error);
+
 
     answerContainer.innerHTML = `
       <div class="answer-box">

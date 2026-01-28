@@ -3,17 +3,19 @@ from langchain_community.vectorstores import FAISS
 from langchain_huggingface import HuggingFaceEmbeddings
 
 embeddings = HuggingFaceEmbeddings(
-    model_name="sentence-transformers/all-MiniLM-L6-v2"
+    model_name="sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2"
 )
 
 VECTORSTORE_CACHE = {}
 
 def get_or_create_vectorstore(video_id, docs_builder=None):
+    print(f"[get_or_create_vectorstore] video_id={video_id}")
     path = f"vectorstores/{video_id}"
     
     # 1. RAM cache
-    if video_id in VECTORSTORE_CACHE:
-        return VECTORSTORE_CACHE[video_id]
+    cached = VECTORSTORE_CACHE.get(video_id)
+    if cached is not None:
+        return cached
     
     # 2. Disk cache
     if os.path.exists(path):
@@ -26,6 +28,11 @@ def get_or_create_vectorstore(video_id, docs_builder=None):
         raise ValueError(f"No cached vectorstore found for {video_id} and no docs_builder provided")
     
     docs = docs_builder(video_id)
+    
+    if not docs:
+        # No transcript available → return None
+        return None
+    
     db = FAISS.from_documents(docs, embeddings)
     os.makedirs("vectorstores", exist_ok=True)
     db.save_local(path)

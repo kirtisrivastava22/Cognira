@@ -40,42 +40,48 @@ import json
 
 @app.post("/ask_stream")
 def ask_stream(req: AskRequest):
+    print("went", flush=True)
 
     def token_generator():
+        print("generator started", flush=True)
+
+        # 🚀 SEND ACK IMMEDIATELY
+        yield json.dumps({"status": "started"}) + "\n"
+
         db = get_or_create_vectorstore(
             req.video_id,
             docs_builder=lambda vid: split_documents(load_youtube_docs(vid))
         )
-
-        retriever = db.as_retriever(search_kwargs={"k": 6})
-        docs = retriever.invoke(req.question)
-
-        if not docs:
+        
+        if db is None:
             yield json.dumps({
-                "answer": "I don't know",
-                "timestamp": None
+                "answer": "I don't know. This video does not have usable transcripts."
             })
             return
-
-        # ✅ pick correct timestamp
+        print("vector store created")
+        retriever = db.as_retriever(search_kwargs={"k": 6})
+        docs = retriever.invoke(req.question)
+        print("Retriver invoked")
+        
+        if not docs:
+            yield json.dumps({"answer": "I don't know"})
+            return
+        print("Docs to hai bhai")
         top_doc = docs[0]
         ts = top_doc.metadata.get("start", 0)
         mm, ss = divmod(ts, 60)
 
-        # 🔥 SEND METADATA FIRST
         yield json.dumps({
             "timestamp": ts,
-            "timestamp_display": f"{mm:02d}:{ss:02d}",
-            "video_id": req.video_id
+            "timestamp_display": f"{mm:02d}:{ss:02d}"
         }) + "\n---\n"
 
         chain = build_rag_chain(llm, retriever)
-
-        # 🔥 STREAM ANSWER
+        print("chain build")
         for chunk in chain.stream(req.question):
             yield chunk
 
-    return StreamingResponse(
-        token_generator(),
-        media_type="text/plain"
-    )
+        # ✅ END STREAM
+        yield "\n ... \n"
+
+    return StreamingResponse(token_generator(), media_type="text/plain")
