@@ -8,14 +8,14 @@
   "action": {
     "default_popup": "popup.html",
     "default_icon": {
-      "16": "youtube.png",
-      "48": "youtube.png",
-      "128": "youtube.png"
+      "16": "youtube2.png",
+      "48": "youtube2.png",
+      "128": "youtube2.png"
     }
   },
   "icons": {
-    "16": "youtube.png",
-    "48": "youtube.png",
-    "128": "youtube.png"
+    "16": "youtube2.png",
+    "48": "youtube2.png",
+    "128": "youtube2.png"
   }
 }

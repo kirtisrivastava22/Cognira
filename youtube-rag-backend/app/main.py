@@ -40,7 +40,7 @@ import json
 import time
 
 @app.post("/ask_stream")
-def ask_stream(req: AskRequest):
+async def ask_stream(req: AskRequest):
 
     def token_generator():
         print("generator started", flush=True)
@@ -96,8 +96,14 @@ def ask_stream(req: AskRequest):
 
     return StreamingResponse(
         token_generator(),
-        media_type="text/event-stream"
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",  # nginx / proxies
+        }
     )
+
 
 from app.chapters import detect_chapters
 

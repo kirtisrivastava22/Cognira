@@ -68,7 +68,6 @@ askBtn.onclick = async () => {
     const decoder = new TextDecoder("utf-8");
 
     let buffer = "";
-    let answerText = "";
 
     while (true) {
       const { value, done } = await reader.read();
@@ -77,55 +76,58 @@ askBtn.onclick = async () => {
       buffer += decoder.decode(value, { stream: true });
 
       const events = buffer.split("\n\n");
-      buffer = events.pop(); // keep incomplete chunk
+      buffer = events.pop();
 
       for (const event of events) {
         if (!event.startsWith("data: ")) continue;
 
-        const payload = JSON.parse(event.replace("data: ", ""));
+        const payload = JSON.parse(event.slice(6));
 
-        if (payload.type === "status") {
-          showStatus("Generating answer...", false);
-        }
+        switch (payload.type) {
+          case "status":
+            showStatus("Generating answer…", false);
+            break;
 
-        if (payload.type === "timestamp") {
-          const { seconds, display } = payload.value;
-          tsEl.innerHTML = `
-          <button id="jump-btn" class="timestamp-link">
+          case "timestamp": {
+            const { seconds, display } = payload.value;
+            tsEl.innerHTML = `
+          <button class="timestamp-link" id="jump-btn">
             ⏱ Jump to ${display}
           </button>
         `;
 
-          document.getElementById("jump-btn").onclick = async () => {
-            const [tab] = await chrome.tabs.query({
-              active: true,
-              currentWindow: true,
-            });
+            document.getElementById("jump-btn").onclick = async () => {
+              const [tab] = await chrome.tabs.query({
+                active: true,
+                currentWindow: true,
+              });
 
-            chrome.scripting.executeScript({
-              target: { tabId: tab.id },
-              func: (time) => {
-                const video = document.querySelector("video");
-                if (video) {
-                  video.currentTime = time;
-                  video.play();
-                }
-              },
-              args: [seconds],
-            });
-          };
-        }
-        if (payload.type === "token") {
-          answerText += payload.value;
-          answerEl.textContent = answerText;
-        }
+              chrome.scripting.executeScript({
+                target: { tabId: tab.id },
+                func: (time) => {
+                  const video = document.querySelector("video");
+                  if (video) {
+                    video.currentTime = time;
+                    video.play();
+                  }
+                },
+                args: [seconds],
+              });
+            };
+            break;
+          }
 
-        if (payload.type === "end") {
-          showStatus("", false);
+          case "token":
+            answerEl.insertAdjacentText("beforeend", payload.value);
+            break;
+
+          case "end":
+            showStatus("", false);
+            askBtn.disabled = false;
+            break;
         }
       }
     }
-
   } catch (error) {
     showStatus("Backend not running on http://127.0.0.1:8000", true);
     console.error(error);
@@ -164,73 +166,84 @@ function showStatus(message, isError = false) {
 }
 
 // Add tab switching
-document.querySelectorAll('.tab-btn').forEach(btn => {
-  btn.addEventListener('click', () => {
+document.querySelectorAll(".tab-btn").forEach((btn) => {
+  btn.addEventListener("click", () => {
     const tab = btn.dataset.tab;
-    
+
     // Update active tab button
-    document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
-    btn.classList.add('active');
-    
+    document
+      .querySelectorAll(".tab-btn")
+      .forEach((b) => b.classList.remove("active"));
+    btn.classList.add("active");
+
     // Show/hide content
-    document.querySelectorAll('.tab-content').forEach(c => c.classList.add('hidden'));
-    document.getElementById(`${tab}-tab`).classList.remove('hidden');
+    document
+      .querySelectorAll(".tab-content")
+      .forEach((c) => c.classList.add("hidden"));
+    document.getElementById(`${tab}-tab`).classList.remove("hidden");
   });
 });
 
 // Load chapters
-document.getElementById('load-chapters-btn').onclick = async () => {
+document.getElementById("load-chapters-btn").onclick = async () => {
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
   const videoId = new URL(tab.url).searchParams.get("v");
-  
+
   if (!videoId) {
     alert("Please open a YouTube video");
     return;
   }
-  
-  document.getElementById('chapters-list').innerHTML = '<div class="spinner"></div>';
-  
+
+  document.getElementById("chapters-list").innerHTML =
+    '<div class="spinner"></div>';
+
   try {
     const res = await fetch(`http://127.0.0.1:8000/chapters/${videoId}`);
     const data = await res.json();
-    
+
     if (data.error) {
-      document.getElementById('chapters-list').innerHTML = 
+      document.getElementById("chapters-list").innerHTML =
         `<div class="error-msg">${data.error}</div>`;
       return;
     }
-    
-    const chaptersHTML = data.chapters.map(ch => `
+
+    const chaptersHTML = data.chapters
+      .map(
+        (ch) => `
       <div class="chapter-item" data-time="${ch.start_time}">
         <div class="chapter-title">${ch.title}</div>
         <div class="chapter-time">${ch.timestamp}</div>
       </div>
-    `).join('');
-    
-    document.getElementById('chapters-list').innerHTML = chaptersHTML;
-    
+    `,
+      )
+      .join("");
+
+    document.getElementById("chapters-list").innerHTML = chaptersHTML;
+
     // Make chapters clickable
-    document.querySelectorAll('.chapter-item').forEach(item => {
+    document.querySelectorAll(".chapter-item").forEach((item) => {
       item.onclick = async () => {
         const time = parseInt(item.dataset.time);
-        const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-        
+        const [tab] = await chrome.tabs.query({
+          active: true,
+          currentWindow: true,
+        });
+
         chrome.scripting.executeScript({
           target: { tabId: tab.id },
           func: (t) => {
-            const video = document.querySelector('video');
+            const video = document.querySelector("video");
             if (video) {
               video.currentTime = t;
               video.play();
             }
           },
-          args: [time]
+          args: [time],
         });
       };
     });
-    
   } catch (error) {
-    document.getElementById('chapters-list').innerHTML = 
+    document.getElementById("chapters-list").innerHTML =
       '<div class="error-msg">Backend not running</div>';
   }
 };
@@ -238,105 +251,121 @@ document.getElementById('load-chapters-btn').onclick = async () => {
 let currentQuiz = null;
 let userAnswers = [];
 
-document.getElementById('generate-quiz-btn').onclick = async () => {
+document.getElementById("generate-quiz-btn").onclick = async () => {
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
   const videoId = new URL(tab.url).searchParams.get("v");
-  
+
   if (!videoId) {
     alert("Please open a YouTube video");
     return;
   }
-  
-  document.getElementById('quiz-container').innerHTML = '<div class="spinner"></div> Generating quiz...';
-  
+
+  document.getElementById("quiz-container").innerHTML =
+    '<div class="spinner"></div> Generating quiz...';
+
   try {
-    const res = await fetch(`http://127.0.0.1:8000/quiz/${videoId}?num_questions=5`);
+    const res = await fetch(
+      `http://127.0.0.1:8000/quiz/${videoId}?num_questions=5`,
+    );
     const data = await res.json();
-    
+
     if (data.error) {
-      document.getElementById('quiz-container').innerHTML = 
+      document.getElementById("quiz-container").innerHTML =
         `<div class="error-msg">${data.error}</div>`;
       return;
     }
-    
+
     currentQuiz = data.questions;
     userAnswers = new Array(data.questions.length).fill(null);
     renderQuiz();
-    
   } catch (error) {
-    document.getElementById('quiz-container').innerHTML = 
+    document.getElementById("quiz-container").innerHTML =
       '<div class="error-msg">Backend not running</div>';
   }
 };
-
 function renderQuiz() {
   const quizHTML = currentQuiz.map((q, qIdx) => `
-    <div class="quiz-question" data-q="${qIdx}">
-      <div class="question-text">${qIdx + 1}. ${q.question}</div>
-      <div class="options">
-        ${q.options.map((opt, optIdx) => `
-          <label class="option">
-            <input type="radio" name="q${qIdx}" value="${optIdx}">
-            <span>${opt}</span>
-          </label>
-        `).join('')}
+    <div class="quiz-card">
+      <div class="quiz-question">
+        <span class="quiz-qno">${qIdx + 1}</span>
+        <span>${q.question}</span>
       </div>
+
+      <div class="quiz-options">
+  ${q.options.map((opt, optIdx) => `
+    <label class="quiz-option">
+      <input type="radio" name="q${qIdx}" value="${optIdx}">
+      <span class="option-text">${opt}</span>
+    </label>
+  `).join("")}
+</div>
+
     </div>
-  `).join('');
-  
-  document.getElementById('quiz-container').innerHTML = quizHTML + `
-    <button id="submit-quiz-btn" class="primary-btn">Submit Quiz</button>
+  `).join("");
+
+  document.getElementById("quiz-container").innerHTML = `
+    ${quizHTML}
+    <button id="submit-quiz-btn" class="primary-btn full-width">
+      Submit Quiz
+    </button>
   `;
-  
-  // Track answers
+
   document.querySelectorAll('input[type="radio"]').forEach(radio => {
     radio.onchange = (e) => {
-      const qIdx = parseInt(e.target.name.replace('q', ''));
+      const qIdx = parseInt(e.target.name.replace("q", ""));
       userAnswers[qIdx] = parseInt(e.target.value);
     };
   });
-  
-  document.getElementById('submit-quiz-btn').onclick = submitQuiz;
+
+  document.getElementById("submit-quiz-btn").onclick = submitQuiz;
 }
+
 
 function submitQuiz() {
   let correct = 0;
-  
+
   currentQuiz.forEach((q, idx) => {
     if (userAnswers[idx] === q.correct) {
       correct++;
     }
   });
-  
+
   const percentage = Math.round((correct / currentQuiz.length) * 100);
-  
+
   document.getElementById('quiz-results').innerHTML = `
-    <div class="quiz-score ${percentage >= 60 ? 'pass' : 'fail'}">
-      <h3>Score: ${correct}/${currentQuiz.length}</h3>
-      <p>${percentage}%</p>
-    </div>
-    
-    <div class="quiz-review">
-      ${currentQuiz.map((q, idx) => {
-        const userAns = userAnswers[idx];
-        const isCorrect = userAns === q.correct;
-        
-        return `
-          <div class="review-item ${isCorrect ? 'correct' : 'wrong'}">
-            <div class="review-question">${idx + 1}. ${q.question}</div>
-            <div class="review-answer">
-              ${isCorrect 
-                ? '✅ Correct!' 
-                : `❌ Wrong. Correct: ${q.options[q.correct]}`
-              }
-            </div>
-            <div class="review-explanation">${q.explanation}</div>
+  <div class="quiz-score ${percentage >= 60 ? 'pass' : 'fail'}">
+    <h3>Score: ${correct}/${currentQuiz.length}</h3>
+    <p>${percentage}%</p>
+  </div>
+
+  <div class="quiz-review">
+    ${currentQuiz.map((q, idx) => {
+      const userAns = userAnswers[idx];
+      const isCorrect = userAns === q.correct;
+
+      return `
+        <div class="review-card ${isCorrect ? 'correct' : 'wrong'}">
+          <div class="review-question">
+            ${idx + 1}. ${q.question}
           </div>
-        `;
-      }).join('')}
-    </div>
-  `;
-  
-  document.getElementById('quiz-results').classList.remove('hidden');
-  document.getElementById('quiz-container').innerHTML = '';
+
+          <div class="review-answer">
+            ${isCorrect 
+              ? '✅ Correct' 
+              : `❌ Wrong · Correct: <strong>${q.options[q.correct]}</strong>`
+            }
+          </div>
+
+          <div class="review-explanation">
+            ${q.explanation}
+          </div>
+        </div>
+      `;
+    }).join("")}
+  </div>
+`;
+
+
+  document.getElementById("quiz-results").classList.remove("hidden");
+  document.getElementById("quiz-container").innerHTML = "";
 }
