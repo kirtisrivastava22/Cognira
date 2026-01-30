@@ -18,7 +18,7 @@
         </div>
         <div>
           <h1>YouTube RAG</h1>
-          <p>Ask questions about videos</p>
+          <p>Your video buddy...</p>
         </div>
       </div>
     </div>
@@ -28,6 +28,7 @@
       <div class="tabs">
         <button class="tab-btn active" data-tab="ask">Ask Question</button>
         <button class="tab-btn" data-tab="chapters">Chapters</button>
+        <button class="tab-btn" data-tab="quiz">Quiz</button>
       </div>
 
       <div id="ask-tab" class="tab-content active">
@@ -41,17 +42,19 @@
         </div>
 
         <button id="ask">
-        <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path
-            stroke-linecap="round"
-            stroke-linejoin="round"
-            stroke-width="2"
-            d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"
-          />
-        </svg>
-        Ask Question
-      </button>
+          <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              stroke-width="2"
+              d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"
+            />
+          </svg>
+          Ask Question
+        </button>
 
+        <div id="status-container"></div>
+        <div id="answer-container"></div>
       </div>
 
       <div id="chapters-tab" class="tab-content hidden">
@@ -61,8 +64,14 @@
         <div id="chapters-list"></div>
       </div>
 
-      <div id="status-container"></div>
-      <div id="answer-container"></div>
+      <div id="quiz-tab" class="tab-content hidden">
+        <button id="generate-quiz-btn" class="primary-btn">
+          Generate Quiz (5 Questions)
+        </button>
+        <div id="quiz-container"></div>
+        <div id="quiz-results" class="hidden"></div>
+      </div>
+      
 
       <div id="tips" class="tips-box">
         <h3>💡 Tips:</h3>

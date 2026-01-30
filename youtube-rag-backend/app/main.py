@@ -105,3 +105,10 @@ from app.chapters import detect_chapters
 def get_chapters(video_id: str):
     """Get auto-detected chapters"""
     return detect_chapters(video_id)
+
+from app.quiz import generate_quiz
+
+@app.get("/quiz/{video_id}")
+def get_quiz(video_id: str, num_questions: int = 5):
+    """Generate quiz questions"""
+    return generate_quiz(video_id, num_questions)

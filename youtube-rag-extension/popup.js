@@ -234,3 +234,109 @@ document.getElementById('load-chapters-btn').onclick = async () => {
       '<div class="error-msg">Backend not running</div>';
   }
 };
+
+let currentQuiz = null;
+let userAnswers = [];
+
+document.getElementById('generate-quiz-btn').onclick = async () => {
+  const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+  const videoId = new URL(tab.url).searchParams.get("v");
+  
+  if (!videoId) {
+    alert("Please open a YouTube video");
+    return;
+  }
+  
+  document.getElementById('quiz-container').innerHTML = '<div class="spinner"></div> Generating quiz...';
+  
+  try {
+    const res = await fetch(`http://127.0.0.1:8000/quiz/${videoId}?num_questions=5`);
+    const data = await res.json();
+    
+    if (data.error) {
+      document.getElementById('quiz-container').innerHTML = 
+        `<div class="error-msg">${data.error}</div>`;
+      return;
+    }
+    
+    currentQuiz = data.questions;
+    userAnswers = new Array(data.questions.length).fill(null);
+    renderQuiz();
+    
+  } catch (error) {
+    document.getElementById('quiz-container').innerHTML = 
+      '<div class="error-msg">Backend not running</div>';
+  }
+};
+
+function renderQuiz() {
+  const quizHTML = currentQuiz.map((q, qIdx) => `
+    <div class="quiz-question" data-q="${qIdx}">
+      <div class="question-text">${qIdx + 1}. ${q.question}</div>
+      <div class="options">
+        ${q.options.map((opt, optIdx) => `
+          <label class="option">
+            <input type="radio" name="q${qIdx}" value="${optIdx}">
+            <span>${opt}</span>
+          </label>
+        `).join('')}
+      </div>
+    </div>
+  `).join('');
+  
+  document.getElementById('quiz-container').innerHTML = quizHTML + `
+    <button id="submit-quiz-btn" class="primary-btn">Submit Quiz</button>
+  `;
+  
+  // Track answers
+  document.querySelectorAll('input[type="radio"]').forEach(radio => {
+    radio.onchange = (e) => {
+      const qIdx = parseInt(e.target.name.replace('q', ''));
+      userAnswers[qIdx] = parseInt(e.target.value);
+    };
+  });
+  
+  document.getElementById('submit-quiz-btn').onclick = submitQuiz;
+}
+
+function submitQuiz() {
+  let correct = 0;
+  
+  currentQuiz.forEach((q, idx) => {
+    if (userAnswers[idx] === q.correct) {
+      correct++;
+    }
+  });
+  
+  const percentage = Math.round((correct / currentQuiz.length) * 100);
+  
+  document.getElementById('quiz-results').innerHTML = `
+    <div class="quiz-score ${percentage >= 60 ? 'pass' : 'fail'}">
+      <h3>Score: ${correct}/${currentQuiz.length}</h3>
+      <p>${percentage}%</p>
+    </div>
+    
+    <div class="quiz-review">
+      ${currentQuiz.map((q, idx) => {
+        const userAns = userAnswers[idx];
+        const isCorrect = userAns === q.correct;
+        
+        return `
+          <div class="review-item ${isCorrect ? 'correct' : 'wrong'}">
+            <div class="review-question">${idx + 1}. ${q.question}</div>
+            <div class="review-answer">
+              ${isCorrect 
+                ? '✅ Correct!' 
+                : `❌ Wrong. Correct: ${q.options[q.correct]}`
+              }
+            </div>
+            <div class="review-explanation">${q.explanation}</div>
+          </div>
+        `;
+      }).join('')}
+    </div>
+  `;
+  
+  document.getElementById('quiz-results').classList.remove('hidden');
+  document.getElementById('quiz-container').innerHTML = '';
+}
