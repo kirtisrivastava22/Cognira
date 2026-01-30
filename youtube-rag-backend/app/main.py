@@ -98,3 +98,10 @@ def ask_stream(req: AskRequest):
         token_generator(),
         media_type="text/event-stream"
     )
+
+from app.chapters import detect_chapters
+
+@app.get("/chapters/{video_id}")
+def get_chapters(video_id: str):
+    """Get auto-detected chapters"""
+    return detect_chapters(video_id)

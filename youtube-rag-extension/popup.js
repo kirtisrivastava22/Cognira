@@ -162,3 +162,75 @@ function showStatus(message, isError = false) {
     </div>
   `;
 }
+
+// Add tab switching
+document.querySelectorAll('.tab-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    const tab = btn.dataset.tab;
+    
+    // Update active tab button
+    document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    
+    // Show/hide content
+    document.querySelectorAll('.tab-content').forEach(c => c.classList.add('hidden'));
+    document.getElementById(`${tab}-tab`).classList.remove('hidden');
+  });
+});
+
+// Load chapters
+document.getElementById('load-chapters-btn').onclick = async () => {
+  const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+  const videoId = new URL(tab.url).searchParams.get("v");
+  
+  if (!videoId) {
+    alert("Please open a YouTube video");
+    return;
+  }
+  
+  document.getElementById('chapters-list').innerHTML = '<div class="spinner"></div>';
+  
+  try {
+    const res = await fetch(`http://127.0.0.1:8000/chapters/${videoId}`);
+    const data = await res.json();
+    
+    if (data.error) {
+      document.getElementById('chapters-list').innerHTML = 
+        `<div class="error-msg">${data.error}</div>`;
+      return;
+    }
+    
+    const chaptersHTML = data.chapters.map(ch => `
+      <div class="chapter-item" data-time="${ch.start_time}">
+        <div class="chapter-title">${ch.title}</div>
+        <div class="chapter-time">${ch.timestamp}</div>
+      </div>
+    `).join('');
+    
+    document.getElementById('chapters-list').innerHTML = chaptersHTML;
+    
+    // Make chapters clickable
+    document.querySelectorAll('.chapter-item').forEach(item => {
+      item.onclick = async () => {
+        const time = parseInt(item.dataset.time);
+        const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+        
+        chrome.scripting.executeScript({
+          target: { tabId: tab.id },
+          func: (t) => {
+            const video = document.querySelector('video');
+            if (video) {
+              video.currentTime = t;
+              video.play();
+            }
+          },
+          args: [time]
+        });
+      };
+    });
+    
+  } catch (error) {
+    document.getElementById('chapters-list').innerHTML = 
+      '<div class="error-msg">Backend not running</div>';
+  }
+};
