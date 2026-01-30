@@ -3,6 +3,7 @@ const questionInput = document.getElementById("question");
 const statusContainer = document.getElementById("status-container");
 const answerContainer = document.getElementById("answer-container");
 const tipsBox = document.getElementById("tips");
+const browserAPI = (typeof browser !== "undefined") ? browser : chrome;
 
 questionInput.focus();
 
@@ -27,7 +28,7 @@ askBtn.onclick = async () => {
   showStatus("Detecting video...", false);
 
   try {
-    const [tab] = await chrome.tabs.query({
+    const [tab] = await browserAPI.tabs.query({
       active: true,
       currentWindow: true,
     });
@@ -97,12 +98,12 @@ askBtn.onclick = async () => {
         `;
 
             document.getElementById("jump-btn").onclick = async () => {
-              const [tab] = await chrome.tabs.query({
+              const [tab] = await browserAPI.tabs.query({
                 active: true,
                 currentWindow: true,
               });
 
-              chrome.scripting.executeScript({
+              browerAPI.scripting.executeScript({
                 target: { tabId: tab.id },
                 func: (time) => {
                   const video = document.querySelector("video");
@@ -186,7 +187,7 @@ document.querySelectorAll(".tab-btn").forEach((btn) => {
 
 // Load chapters
 document.getElementById("load-chapters-btn").onclick = async () => {
-  const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+  const [tab] = await browerAPI.tabs.query({ active: true, currentWindow: true });
   const videoId = new URL(tab.url).searchParams.get("v");
 
   if (!videoId) {
@@ -195,7 +196,7 @@ document.getElementById("load-chapters-btn").onclick = async () => {
   }
 
   document.getElementById("chapters-list").innerHTML =
-    '<div class="spinner"></div>';
+    '<div class="spinner"> Loading chapters...</div>';
 
   try {
     const res = await fetch(`http://127.0.0.1:8000/chapters/${videoId}`);
@@ -224,12 +225,12 @@ document.getElementById("load-chapters-btn").onclick = async () => {
     document.querySelectorAll(".chapter-item").forEach((item) => {
       item.onclick = async () => {
         const time = parseInt(item.dataset.time);
-        const [tab] = await chrome.tabs.query({
+        const [tab] = await browerAPI.tabs.query({
           active: true,
           currentWindow: true,
         });
 
-        chrome.scripting.executeScript({
+        browerAPI.scripting.executeScript({
           target: { tabId: tab.id },
           func: (t) => {
             const video = document.querySelector("video");
@@ -252,7 +253,7 @@ let currentQuiz = null;
 let userAnswers = [];
 
 document.getElementById("generate-quiz-btn").onclick = async () => {
-  const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+  const [tab] = await browerAPI.tabs.query({ active: true, currentWindow: true });
   const videoId = new URL(tab.url).searchParams.get("v");
 
   if (!videoId) {
