@@ -166,6 +166,48 @@ def split_documents(docs):
 
     return chunks
 
+# =========================
+# MANUAL CHAPTER EXTRACTION (NO LLM)
+# =========================
+
+def extract_manual_chapters(transcript_docs, window_sec=120, max_chapters=8):
+    if not transcript_docs:
+        return []
+
+    transcript_docs = sorted(transcript_docs, key=lambda d: d.metadata["start"])
+
+    chapters = []
+    bucket = []
+    bucket_start = transcript_docs[0].metadata["start"]
+
+    for doc in transcript_docs:
+        ts = doc.metadata["start"]
+
+        if ts - bucket_start <= window_sec:
+            bucket.append(doc.page_content)
+        else:
+            mm, ss = divmod(bucket_start, 60)
+            chapters.append({
+                "time": f"{mm:02d}:{ss:02d}",
+                "text": " ".join(bucket)
+            })
+
+            if len(chapters) >= max_chapters:
+                return chapters
+
+            bucket_start = ts
+            bucket = [doc.page_content]
+
+    if bucket and len(chapters) < max_chapters:
+        mm, ss = divmod(bucket_start, 60)
+        chapters.append({
+            "time": f"{mm:02d}:{ss:02d}",
+            "text": " ".join(bucket)
+        })
+
+    return chapters
+
+
 
 # =========================
 # RAG Chain
@@ -187,7 +229,7 @@ def build_rag_chain(llm, retriever):
     })
 
     prompt = PromptTemplate.from_template(
-        """You are a helpful video transcript assistant.
+        """You are a helpful video transcript assistant and a video explainer.
 
 CRITICAL RULES:
 1. Answer ONLY using the Context below

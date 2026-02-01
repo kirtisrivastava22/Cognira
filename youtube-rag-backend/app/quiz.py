@@ -63,6 +63,7 @@ Convert this fact into a multiple-choice question.
 
 Rules:
 - Create a question that tests if someone knows this fact
+- Questions should be factual and specific (not on what is the name of speaker or channel)
 - Generate 3 plausible but wrong options
 - Make the question specific and clear
 

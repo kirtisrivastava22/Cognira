@@ -41,15 +41,18 @@ from fastapi.responses import StreamingResponse
 import json
 import time
 
+
 @app.post("/ask_stream")
 async def ask_stream(req: AskRequest):
 
     def token_generator():
-        print("generator started", flush=True)
-
         # 1️⃣ ACK immediately
-        yield "data: " + json.dumps({"type": "status", "value": "started"}) + "\n\n"
+        yield "data: " + json.dumps({
+            "type": "status",
+            "value": "started"
+        }) + "\n\n"
 
+        # 2️⃣ Build vectorstore
         db = get_or_create_vectorstore(
             req.video_id,
             docs_builder=lambda vid: split_documents(load_youtube_docs(vid))
@@ -60,6 +63,7 @@ async def ask_stream(req: AskRequest):
                 "type": "answer",
                 "value": "I don't know. No transcript available."
             }) + "\n\n"
+            yield "data: " + json.dumps({"type": "end"}) + "\n\n"
             return
 
         retriever = db.as_retriever(search_kwargs={"k": 6})
@@ -68,12 +72,25 @@ async def ask_stream(req: AskRequest):
         if not docs:
             yield "data: " + json.dumps({
                 "type": "answer",
-                "value": "I don't know"
+                "value": "I don't know."
             }) + "\n\n"
+            yield "data: " + json.dumps({"type": "end"}) + "\n\n"
             return
 
-        # 2️⃣ Timestamp first
-        ts = docs[0].metadata.get("start", 0)
+        # 3️⃣ Run chain ONCE to validate answer
+        chain = build_rag_chain(llm, retriever)
+        full_answer = chain.invoke(req.question).strip()
+
+        if "I don't know" in full_answer:
+            yield "data: " + json.dumps({
+                "type": "answer",
+                "value": "I don't know."
+            }) + "\n\n"
+            yield "data: " + json.dumps({"type": "end"}) + "\n\n"
+            return
+
+        # 4️⃣ Emit timestamp ONLY NOW
+        ts = int(docs[0].metadata.get("start", 0))
         mm, ss = divmod(ts, 60)
 
         yield "data: " + json.dumps({
@@ -84,16 +101,14 @@ async def ask_stream(req: AskRequest):
             }
         }) + "\n\n"
 
-        # 3️⃣ Stream tokens
-        chain = build_rag_chain(llm, retriever)
-
+        # 5️⃣ Stream tokens (second pass)
         for token in chain.stream(req.question):
             yield "data: " + json.dumps({
                 "type": "token",
                 "value": token
             }) + "\n\n"
 
-        # 4️⃣ End
+        # 6️⃣ End
         yield "data: " + json.dumps({"type": "end"}) + "\n\n"
 
     return StreamingResponse(
@@ -102,7 +117,7 @@ async def ask_stream(req: AskRequest):
         headers={
             "Cache-Control": "no-cache",
             "Connection": "keep-alive",
-            "X-Accel-Buffering": "no",  # nginx / proxies
+            "X-Accel-Buffering": "no",
         }
     )
 

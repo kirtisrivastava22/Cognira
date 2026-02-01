@@ -1,76 +1,119 @@
 from langchain_groq import ChatGroq
 from langchain_core.prompts import PromptTemplate
 from langchain_core.output_parsers import JsonOutputParser
-from app.rag import load_youtube_docs, split_documents
-import json
+
+from app.rag import load_youtube_docs
+
+# =========================
+# LLM (titles ONLY)
+# =========================
 
 llm = ChatGroq(
     model="llama-3.1-8b-instant",
     temperature=0,
-    max_tokens=2000
+    max_tokens=500
 )
+
 
 def format_ts(seconds: int) -> str:
     m, s = divmod(seconds, 60)
     return f"{m:02d}:{s:02d}"
 
 
+# =========================
+# MANUAL CHAPTER BUCKETING
+# =========================
+
+def bucket_transcript(docs, window_sec=300, max_chapters=6):
+    """
+    Buckets transcript by time.
+    This is the ONLY source of timestamps.
+    """
+    docs = sorted(docs, key=lambda d: d.metadata["start"])
+
+    buckets = []
+    current = []
+    start_ts = docs[0].metadata["start"]
+
+    for doc in docs:
+        ts = doc.metadata["start"]
+
+        if ts - start_ts <= window_sec:
+            current.append(doc.page_content)
+        else:
+            buckets.append({
+                "start_time": start_ts,
+                "text": " ".join(current)
+            })
+            if len(buckets) >= max_chapters:
+                return buckets
+
+            start_ts = ts
+            current = [doc.page_content]
+
+    if current and len(buckets) < max_chapters:
+        buckets.append({
+            "start_time": start_ts,
+            "text": " ".join(current)
+        })
+
+    return buckets
+
+
+# =========================
+# CHAPTER DETECTION (SAFE)
+# =========================
+
 def detect_chapters(video_id: str):
     docs = load_youtube_docs(video_id)
     if not docs:
         return {"error": "No transcript available"}
 
-    full_text = ""
-    MAX_SECONDS = 600  # 10 minutes
+    # 1️⃣ Manual timestamp buckets (SOURCE OF TRUTH)
+    buckets = bucket_transcript(docs)
 
-    for doc in docs:
-        ts = int(doc.metadata.get("start", 0))
-        if ts > MAX_SECONDS:
-            break
-        full_text += f"[{format_ts(ts)}] {doc.page_content}\n"
-
+    # 2️⃣ LLM ONLY for titles
     prompt = PromptTemplate.from_template("""
-Analyze this video transcript and identify distinct chapters.
+You are given a section of a YouTube transcript.
 
-Return ONLY valid JSON in this format:
-[
-  {{"title": "Introduction", "start_time": 0}},
-  {{"title": "Main Topic", "start_time": 120}}
-]
+Return ONLY valid JSON:
+{{
+  "title": "Short descriptive chapter title"
+}}
 
 Rules:
-- 3–7 chapters
-- start_time MUST be in seconds
-- No timestamp strings
+- 3 to 6 words
+- No timestamps
+- No punctuation
 - No extra text
 
 Transcript:
-{transcript}
+{text}
 
 JSON:
 """)
 
-    chain = prompt | llm | JsonOutputParser()
+    chapters = []
 
-    try:
-        chapters = chain.invoke({"transcript": full_text})
+    for idx, bucket in enumerate(buckets):
+        try:
+            chain = prompt | llm | JsonOutputParser()
+            result = chain.invoke({"text": bucket["text"]})
 
-        # enforce correct timestamps
-        for ch in chapters:
-            ch["start_time"] = int(ch["start_time"])
-            ch["timestamp"] = format_ts(ch["start_time"])
+            title = result.get("title", f"Part {idx + 1}")
 
-        return {"chapters": chapters, "video_id": video_id}
+        except Exception:
+            title = f"Part {idx + 1}"
 
-    except Exception as e:
-        return {
-            "chapters": [
-                {
-                    "title": f"Part {i+1}",
-                    "start_time": i * 300,
-                    "timestamp": format_ts(i * 300),
-                }
-                for i in range(3)
-            ],
-            "video_id": video_id,
-        }
+        ts = int(bucket["start_time"])
+
+        chapters.append({
+            "title": title,
+            "start_time": ts,
+            "timestamp": format_ts(ts)
+        })
+
+    return {
+        "video_id": video_id,
+        "chapters": chapters
+    }
