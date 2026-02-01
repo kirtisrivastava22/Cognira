@@ -3,6 +3,8 @@ from fastapi import HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from app.rag import ask_youtube_video, build_rag_chain,get_or_create_vectorstore,split_documents,load_youtube_docs,llm
+from app.export import router as export_router
+
 
 app = FastAPI()
 
@@ -118,3 +120,6 @@ from app.quiz import generate_quiz
 def get_quiz(video_id: str, num_questions: int = 5):
     """Generate quiz questions"""
     return generate_quiz(video_id, num_questions)
+
+
+app.include_router(export_router)

@@ -187,7 +187,7 @@ document.querySelectorAll(".tab-btn").forEach((btn) => {
 
 // Load chapters
 document.getElementById("load-chapters-btn").onclick = async () => {
-  const [tab] = await browerAPI.tabs.query({ active: true, currentWindow: true });
+  const [tab] = await browserAPI.tabs.query({ active: true, currentWindow: true });
   const videoId = new URL(tab.url).searchParams.get("v");
 
   if (!videoId) {
@@ -225,12 +225,12 @@ document.getElementById("load-chapters-btn").onclick = async () => {
     document.querySelectorAll(".chapter-item").forEach((item) => {
       item.onclick = async () => {
         const time = parseInt(item.dataset.time);
-        const [tab] = await browerAPI.tabs.query({
+        const [tab] = await browserAPI.tabs.query({
           active: true,
           currentWindow: true,
         });
 
-        browerAPI.scripting.executeScript({
+        browserAPI.scripting.executeScript({
           target: { tabId: tab.id },
           func: (t) => {
             const video = document.querySelector("video");
@@ -253,7 +253,7 @@ let currentQuiz = null;
 let userAnswers = [];
 
 document.getElementById("generate-quiz-btn").onclick = async () => {
-  const [tab] = await browerAPI.tabs.query({ active: true, currentWindow: true });
+  const [tab] = await browserAPI.tabs.query({ active: true, currentWindow: true });
   const videoId = new URL(tab.url).searchParams.get("v");
 
   if (!videoId) {
@@ -370,3 +370,37 @@ function submitQuiz() {
   document.getElementById("quiz-results").classList.remove("hidden");
   document.getElementById("quiz-container").innerHTML = "";
 }
+document.getElementById("export-pdf-btn").onclick = async () => {
+  const [tab] = await browserAPI.tabs.query({
+    active: true,
+    currentWindow: true
+  });
+
+  const videoId = new URL(tab.url).searchParams.get("v");
+  if (!videoId) {
+    alert("Open a YouTube video first");
+    return;
+  }
+
+  const res = await fetch(
+    `http://127.0.0.1:8000/export/pdf?video_id=${videoId}`,
+    { method: "POST" }
+  );
+
+  if (!res.ok) {
+    alert("Failed to export PDF");
+    return;
+  }
+
+  const blob = await res.blob();
+  const url = URL.createObjectURL(blob);
+
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `${videoId}_notes.pdf`;
+  document.body.appendChild(a);
+  a.click();
+
+  URL.revokeObjectURL(url);
+  document.body.removeChild(a);
+};

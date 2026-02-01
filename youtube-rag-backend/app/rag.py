@@ -74,11 +74,29 @@ def normalize_chunk(chunk):
 # =========================
 # Load YouTube Docs (NO TRANSLATION)
 # =========================
-
+from app.transcript_cache import (
+    load_cached_transcript,
+    save_transcript
+)
 def load_youtube_docs(video_id: str):
+    # 1️⃣ Try cache first
+    cached = load_cached_transcript(video_id)
+    if cached:
+        print("[load_youtube_docs] Loaded transcript from cache")
+        return [
+            Document(
+                page_content=chunk["text"],
+                metadata={"start": chunk["start"]}
+            )
+            for chunk in cached
+        ]
+
+    print("[load_youtube_docs] Cache miss → calling YouTube API")
+
     try:
-        ytt=YouTubeTranscriptApi()
+        ytt = YouTubeTranscriptApi()
         transcript_list = ytt.list(video_id)
+
         try:
             selected = transcript_list.find_manually_created_transcript(
                 [t.language_code for t in transcript_list]
@@ -88,7 +106,7 @@ def load_youtube_docs(video_id: str):
                 [t.language_code for t in transcript_list]
             )
 
-        transcript = selected.fetch()
+        raw_transcript = selected.fetch()
 
     except (NoTranscriptFound, TranscriptsDisabled, VideoUnavailable):
         print("[load_youtube_docs] No transcript available")
@@ -97,13 +115,19 @@ def load_youtube_docs(video_id: str):
         print("[load_youtube_docs] Error:", e)
         return []
 
-    print("[load_youtube_docs] loaded transcript")
+    print("[load_youtube_docs] Transcript fetched from API")
 
+    # 2️⃣ Normalize ONCE (this fixes everything)
+    normalized = []
     docs = []
-    transcript = ensure_iterable_transcript(transcript)
 
-    for raw_chunk in transcript:
+    for raw_chunk in ensure_iterable_transcript(raw_transcript):
         chunk = normalize_chunk(raw_chunk)
+
+        if not chunk["text"].strip():
+            continue
+
+        normalized.append(chunk)
 
         docs.append(
             Document(
@@ -112,9 +136,12 @@ def load_youtube_docs(video_id: str):
             )
         )
 
+    # 3️⃣ Save normalized transcript to cache
+    save_transcript(video_id, normalized)
+    print("[load_youtube_docs] Transcript saved to cache")
+
     print(f"[load_youtube_docs] docs count = {len(docs)}")
     return docs
-
 
 # =========================
 # Split Documents
