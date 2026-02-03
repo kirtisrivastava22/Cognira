@@ -103,7 +103,7 @@ askBtn.onclick = async () => {
                 currentWindow: true,
               });
 
-              browerAPI.scripting.executeScript({
+              browserAPI.scripting.executeScript({
                 target: { tabId: tab.id },
                 func: (time) => {
                   const video = document.querySelector("video");

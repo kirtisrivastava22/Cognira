@@ -172,6 +172,22 @@ body {
   color: #333;
 }
 
+/* Clickable timestamp button */
+.timestamp-link {
+  background: transparent;
+  border: none;
+  color: #dd677b;
+  font-weight: 700;
+  cursor: pointer;
+  padding: 0;
+  font-size: 13px;
+}
+
+.timestamp-link:hover {
+  text-decoration: underline;
+  color: #f472b6;
+}
+
 /* ===== CHAPTERS ===== */
 .chapter-item {
   padding: 14px;
