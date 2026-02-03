@@ -46,13 +46,11 @@ import time
 async def ask_stream(req: AskRequest):
 
     def token_generator():
-        # 1️⃣ ACK immediately
         yield "data: " + json.dumps({
             "type": "status",
             "value": "started"
         }) + "\n\n"
 
-        # 2️⃣ Build vectorstore
         db = get_or_create_vectorstore(
             req.video_id,
             docs_builder=lambda vid: split_documents(load_youtube_docs(vid))
@@ -77,20 +75,27 @@ async def ask_stream(req: AskRequest):
             yield "data: " + json.dumps({"type": "end"}) + "\n\n"
             return
 
-        # 3️⃣ Run chain ONCE to validate answer
         chain = build_rag_chain(llm, retriever)
-        full_answer = chain.invoke(req.question).strip()
+        answer_text = ""
 
-        if "I don't know" in full_answer:
+        for token in chain.stream(req.question):
+            answer_text += token
+            yield "data: " + json.dumps({
+                "type": "token",
+                "value": token
+            }) + "\n\n"
+
+        # AFTER full answer is known
+        if "I don't know" in answer_text:
             yield "data: " + json.dumps({
                 "type": "answer",
-                "value": "I don't know."
+                "value": "I don't know. The video does not contain this information."
             }) + "\n\n"
             yield "data: " + json.dumps({"type": "end"}) + "\n\n"
             return
 
-        # 4️⃣ Emit timestamp ONLY NOW
-        ts = int(docs[0].metadata.get("start", 0))
+        # Now timestamp is valid
+        ts = docs[0].metadata.get("start", 0)
         mm, ss = divmod(ts, 60)
 
         yield "data: " + json.dumps({
@@ -101,15 +106,8 @@ async def ask_stream(req: AskRequest):
             }
         }) + "\n\n"
 
-        # 5️⃣ Stream tokens (second pass)
-        for token in chain.stream(req.question):
-            yield "data: " + json.dumps({
-                "type": "token",
-                "value": token
-            }) + "\n\n"
-
-        # 6️⃣ End
         yield "data: " + json.dumps({"type": "end"}) + "\n\n"
+
 
     return StreamingResponse(
         token_generator(),

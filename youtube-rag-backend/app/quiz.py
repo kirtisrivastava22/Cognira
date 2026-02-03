@@ -9,6 +9,14 @@ llm = ChatGroq(
     temperature=0.3,
     max_tokens=1500
 )
+BAD_KEYWORDS = [
+    "host", "speaker", "playlist","channel", "subscribe","like", "comment",
+    "welcome", "my name", "this channel", "introduced","i am from"
+]
+
+def is_valid_fact(fact: str) -> bool:
+    lower = fact.lower()
+    return not any(k in lower for k in BAD_KEYWORDS)
 
 def extract_key_facts(video_id: str):
     """Extract key facts/statements from video"""
@@ -106,6 +114,8 @@ def generate_quiz(video_id: str, num_questions: int = 5):
     print(f"[generate_quiz] Extracting facts for {video_id}")
     
     facts = extract_key_facts(video_id)
+    facts = [f for f in facts if is_valid_fact(f)]
+
     
     if not facts:
         return {"error": "Could not extract facts from video"}
