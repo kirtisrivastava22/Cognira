@@ -4,8 +4,47 @@ const statusContainer = document.getElementById("status-container");
 const answerContainer = document.getElementById("answer-container");
 const tipsBox = document.getElementById("tips");
 const browserAPI = (typeof browser !== "undefined") ? browser : chrome;
+async function loadVideoTitle() {
+  try {
+    const [tab] = await browserAPI.tabs.query({
+      active: true,
+      currentWindow: true,
+    });
+
+    const url = new URL(tab.url);
+    const videoId = url.searchParams.get("v");
+
+    if (!videoId) return;
+
+    // Get title from YouTube page DOM
+    const results = await browserAPI.scripting.executeScript({
+      target: { tabId: tab.id },
+      func: () => {
+        const titleEl =
+          document.querySelector("h1.ytd-watch-metadata") ||
+          document.querySelector("h1.title") ||
+          document.querySelector("meta[name='title']");
+
+        if (!titleEl) return null;
+
+        if (titleEl.content) return titleEl.content;
+        return titleEl.innerText || titleEl.textContent;
+      },
+    });
+
+    const title = results?.[0]?.result;
+
+    if (title) {
+      document.getElementById("video-title").textContent = title.trim();
+    }
+  } catch (err) {
+    console.log("Video title load failed", err);
+  }
+}
 
 questionInput.focus();
+
+loadVideoTitle();
 
 questionInput.addEventListener("keydown", (e) => {
   if (e.key === "Enter" && !e.shiftKey) {
@@ -381,6 +420,8 @@ document.getElementById("export-pdf-btn").onclick = async () => {
     alert("Open a YouTube video first");
     return;
   }
+  document.getElementById("quiz-container").innerHTML =
+    '<div class="spinner"></div> Generating pdf...';
 
   const res = await fetch(
     `http://127.0.0.1:8000/export/pdf?video_id=${videoId}`,

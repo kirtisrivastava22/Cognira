@@ -248,6 +248,25 @@ Answer:"""
     return parallel | prompt | llm | StrOutputParser()
 
 
+def rerank_docs_by_timestamp_density(docs):
+    if not docs:
+        return docs
+
+    # cluster around nearby timestamps
+    scores = []
+    for i, d in enumerate(docs):
+        ts = d.metadata.get("start", 0)
+
+        density = sum(
+            1 for x in docs
+            if abs(x.metadata.get("start", 0) - ts) <= 30
+        )
+
+        scores.append((density, i))
+
+    scores.sort(reverse=True)
+    return [docs[i] for _, i in scores]
+
 # =========================
 # Ask YouTube Video
 # =========================
@@ -261,11 +280,18 @@ def ask_youtube_video(video_id, question):
     )
 
     retriever = db.as_retriever(
-        search_type="similarity",
-        search_kwargs={"k": 6}
+        search_type="mmr",
+        search_kwargs={
+            "k": 10,
+            "fetch_k": 25,
+            "lambda_mult": 0.5
+        }
     )
 
+
     docs = retriever.invoke(question)
+    docs = rerank_docs_by_timestamp_density(docs)
+
 
     if not docs:
         return {

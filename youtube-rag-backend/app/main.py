@@ -2,8 +2,9 @@ from fastapi import FastAPI
 from fastapi import HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
-from app.rag import ask_youtube_video, build_rag_chain,get_or_create_vectorstore,split_documents,load_youtube_docs,llm
+from app.rag import ask_youtube_video, build_rag_chain,get_or_create_vectorstore, rerank_docs_by_timestamp_density,split_documents,load_youtube_docs,llm
 from app.export import router as export_router
+
 
 
 app = FastAPI()
@@ -64,8 +65,18 @@ async def ask_stream(req: AskRequest):
             yield "data: " + json.dumps({"type": "end"}) + "\n\n"
             return
 
-        retriever = db.as_retriever(search_kwargs={"k": 6})
+        retriever = db.as_retriever(
+            search_type="mmr",
+            search_kwargs={
+                "k": 10,
+                "fetch_k": 25,
+                "lambda_mult": 0.5
+            }
+        )
+
         docs = retriever.invoke(req.question)
+        docs = rerank_docs_by_timestamp_density(docs)
+
 
         if not docs:
             yield "data: " + json.dumps({
