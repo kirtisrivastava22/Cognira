@@ -7,11 +7,12 @@ from pathlib import Path
 from app.rag import ask_youtube_video, load_youtube_docs, split_documents
 import requests
 
+
+router = APIRouter()
+
+
 def get_video_metadata(video_id: str):
-    """
-    Fetches video title and channel name using YouTube oEmbed.
-    No API key required.
-    """
+
     url = "https://www.youtube.com/oembed"
     params = {
         "url": f"https://www.youtube.com/watch?v={video_id}",
@@ -28,75 +29,69 @@ def get_video_metadata(video_id: str):
             "channel": data.get("author_name", "Unknown Channel")
         }
 
-    except Exception:
+    except:
         return {
             "title": f"YouTube Video ({video_id})",
             "channel": "Unknown Channel"
         }
 
 
-router = APIRouter()
-
 @router.post("/export/pdf")
 def export_pdf(video_id: str):
+
     EXPORT_DIR = Path("exports")
     EXPORT_DIR.mkdir(exist_ok=True)
     filename = EXPORT_DIR / f"{video_id}_notes.pdf"
 
-    # -------- Load transcript --------
     docs = split_documents(load_youtube_docs(video_id))
     if not docs:
         return {"error": "Transcript not available"}
 
-    # -------- Fetch YouTube metadata --------
     meta = get_video_metadata(video_id)
     video_title = meta["title"]
     channel_name = meta["channel"]
 
-    # -------- Generate structured notes --------
-    summary = ask_youtube_video(
+    notes = ask_youtube_video(
         video_id,
         """
-Create concise topic-based notes for this YouTube video only based on context.
+Create structured STUDY NOTES from this video.
 
 RULES:
-- Do NOT tell that a video is made here or how video is made
-- Tell what is discussed in the video only
-- Use bullet points for topics
-- Do NOT include timestamps
-- Do NOT quote transcript sentences
-- Do NOT mention the speaker
-- Use clear topic headings
-- Under each topic, explain briefly what is discussed
-- Keep it short, clean, and high-level
+- Use bullet points
+- Use topic headings
+- Focus on concepts, definitions, processes
+- No storytelling
+- No summary paragraph
+- Write like class notes
 
-FORMAT STRICTLY LIKE THIS:
+FORMAT:
 
 Overview:
-<2–3 sentence overview>
+• point
+• point
 
-Topics Covered:
-- Topic 1: short explanation (nextline)
-- Topic 2: short explanation (nextline)
-- Topic 3: short explanation
+Key Concepts:
+• concept — explanation
+• concept — explanation
+
+Important Details:
+• detail
+• detail
 """
     )["answer"]
 
-    # -------- Build PDF --------
     styles = getSampleStyleSheet()
     doc = SimpleDocTemplate(str(filename), pagesize=A4)
     elements = []
 
     elements.append(Paragraph(video_title, styles["Title"]))
     elements.append(Spacer(1, 6))
-
-    elements.append(
-        Paragraph(f"<i>{channel_name}</i>", styles["Heading3"])
-    )
+    elements.append(Paragraph(f"<i>{channel_name}</i>", styles["Heading3"]))
     elements.append(Spacer(1, 12))
 
-    elements.append(Paragraph(summary, styles["BodyText"]))
-    elements.append(Spacer(1, 12))
+    for line in notes.split("\n"):
+        elements.append(Paragraph(line, styles["BodyText"]))
+        elements.append(Spacer(1, 4))
 
     doc.build(elements)
 
