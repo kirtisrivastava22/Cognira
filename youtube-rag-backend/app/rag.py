@@ -17,6 +17,7 @@ from langchain_core.runnables import (
 from langchain_core.prompts import PromptTemplate
 from langchain_core.output_parsers import StrOutputParser
 
+from typer import prompt
 from youtube_transcript_api import YouTubeTranscriptApi
 from youtube_transcript_api import (
     NoTranscriptFound,
@@ -159,16 +160,16 @@ def build_rag_chain(llm, retriever):
     })
 
     prompt = PromptTemplate.from_template(
-"""You are a video transcript assistant and summarizer.
+"""You are a strict video transcript analyst.
 
 RULES:
-- Use ONLY context below
-- If answer not clearly present → say: I don't know
-- NO guessing
-- NO general knowledge
-- NO apologies
-- Answer directly and confidently
-- 2 to 5 sentences max
+- Use ONLY the provided transcript context
+- If answer not present → say exactly: I don't know
+- Do NOT use outside knowledge
+- Do NOT guess
+- Be concise
+- 2–4 sentences max
+- Ground statements in transcript facts
 
 Context:
 {context}
@@ -177,9 +178,7 @@ Question: {question}
 
 Answer:"""
 )
-
     return parallel | prompt | llm | StrOutputParser()
-
 
 # =========================
 # ASK
@@ -187,6 +186,9 @@ Answer:"""
 
 def ask_youtube_video(video_id, question):
 
+    # -------------------------
+    # VECTORSTORE (persistent)
+    # -------------------------
     db = get_or_create_vectorstore(
         video_id,
         docs_builder=lambda vid: split_documents(load_youtube_docs(vid))
@@ -195,7 +197,7 @@ def ask_youtube_video(video_id, question):
     retriever = db.as_retriever(
         search_type="mmr",
         search_kwargs={
-            "k": 12,
+            "k": 14,
             "fetch_k": 40,
             "lambda_mult": 0.5
         }
@@ -207,28 +209,50 @@ def ask_youtube_video(video_id, question):
     if not docs:
         return {
             "answer": "I don't know",
-            "timestamp": None,
+            "timestamps": [],
             "video_id": video_id
         }
 
+    # -------------------------
+    # BUILD RAG CHAIN
+    # -------------------------
     chain = build_rag_chain(llm, retriever)
     answer = chain.invoke(question).strip()
 
     if answer.lower().startswith("i don't know"):
         return {
             "answer": "I don't know",
-            "timestamp": None,
+            "timestamps": [],
             "video_id": video_id
         }
 
-    # best timestamp cluster
-    best_doc = docs[0]
-    ts = best_doc.metadata.get("start", 0)
-    mm, ss = divmod(ts, 60)
+    # -------------------------
+    # MULTI TIMESTAMP LOGIC
+    # -------------------------
+    timestamps = []
+    seen = set()
+
+    for doc in docs:
+        ts = doc.metadata.get("start", 0)
+
+        # avoid duplicates within 40s
+        if any(abs(ts - s) < 40 for s in seen):
+            continue
+
+        seen.add(ts)
+
+        mm, ss = divmod(ts, 60)
+
+        timestamps.append({
+            "seconds": ts,
+            "display": f"{mm:02d}:{ss:02d}"
+        })
+
+        if len(timestamps) == 4:
+            break
 
     return {
         "answer": answer,
-        "timestamp": ts,
-        "timestamp_display": f"{mm:02d}:{ss:02d}",
+        "timestamps": timestamps,
         "video_id": video_id
     }

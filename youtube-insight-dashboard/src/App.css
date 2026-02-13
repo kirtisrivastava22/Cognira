@@ -1,0 +1,258 @@
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  background: linear-gradient(160deg, #e3f2f7, #becedb);
+  color: #2b2b2b;
+  min-height: 100vh;
+}
+
+.app {
+  display: flex;
+  min-height: 100vh;
+}
+
+.main-content {
+  flex: 1;
+  margin-left: 280px;
+  padding: 32px;
+  transition: margin-left 0.3s ease;
+}
+
+@media (max-width: 1024px) {
+  .main-content {
+    margin-left: 0;
+    padding: 20px;
+  }
+}
+
+/* Primary gradient */
+.gradient-primary {
+  background: linear-gradient(135deg, #dd677b, #85285d);
+}
+
+/* Button styles */
+.btn-primary {
+  padding: 14px 24px;
+  border-radius: 16px;
+  border: none;
+  background: linear-gradient(135deg, #dd677b, #85285d);
+  color: white;
+  font-size: 15px;
+  font-weight: 800;
+  cursor: pointer;
+  box-shadow: 0 12px 28px rgba(133, 40, 93, 0.4);
+  transition: all 0.25s ease;
+}
+
+.btn-primary:hover {
+  transform: translateY(-2px) scale(1.01);
+}
+
+.btn-primary:disabled {
+  background: #becedb;
+  box-shadow: none;
+  cursor: not-allowed;
+  transform: none;
+}
+
+.btn-secondary {
+  padding: 12px 20px;
+  border-radius: 14px;
+  border: 2px solid #dd677b;
+  background: transparent;
+  color: #85285d;
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.25s ease;
+}
+
+.btn-secondary:hover {
+  background: rgba(221, 103, 123, 0.1);
+}
+
+/* Card styles */
+.card {
+  background: rgba(255, 255, 255, 0.85);
+  border-radius: 18px;
+  padding: 24px;
+  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.08);
+  animation: popIn 0.3s ease;
+}
+
+.card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 20px;
+  padding-bottom: 16px;
+  border-bottom: 2px solid rgba(133, 40, 93, 0.1);
+}
+
+.card-title {
+  font-size: 20px;
+  font-weight: 800;
+  color: #85285d;
+}
+
+/* Input styles */
+.input-group {
+  margin-bottom: 20px;
+}
+
+.input-group label {
+  font-size: 13px;
+  font-weight: 700;
+  margin-bottom: 6px;
+  display: block;
+  color: #85285d;
+}
+
+.input,
+.textarea {
+  width: 100%;
+  padding: 14px;
+  background: rgba(255, 255, 255, 0.9);
+  border: 2px solid transparent;
+  border-radius: 14px;
+  font-size: 14px;
+  outline: none;
+  font-family: inherit;
+  transition: all 0.25s ease;
+}
+
+.textarea {
+  resize: vertical;
+  min-height: 100px;
+}
+
+.input:focus,
+.textarea:focus {
+  border-color: #dd677b;
+  box-shadow: 0 0 0 4px rgba(221, 103, 123, 0.25);
+}
+
+/* Status messages */
+.status-box {
+  padding: 12px 16px;
+  border-radius: 14px;
+  font-size: 13px;
+  margin-bottom: 16px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.status-box.loading {
+  background: #e3f2f7;
+  color: #85285d;
+}
+
+.status-box.error {
+  background: #f5d8be;
+  color: #85285d;
+}
+
+.status-box.success {
+  background: #d1fae5;
+  color: #065f46;
+}
+
+/* Spinner */
+.spinner {
+  display: inline-block;
+  width: 16px;
+  height: 16px;
+  border: 3px solid rgba(133, 40, 93, 0.2);
+  border-top-color: #dd677b;
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* Animation */
+@keyframes popIn {
+  from {
+    opacity: 0;
+    transform: scale(0.97);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+/* Utility classes */
+.hidden {
+  display: none;
+}
+
+.text-center {
+  text-align: center;
+}
+
+.mt-4 {
+  margin-top: 16px;
+}
+
+.mb-4 {
+  margin-bottom: 16px;
+}
+
+.flex {
+  display: flex;
+}
+
+.flex-col {
+  flex-direction: column;
+}
+
+.items-center {
+  align-items: center;
+}
+
+.justify-between {
+  justify-content: space-between;
+}
+
+.gap-4 {
+  gap: 16px;
+}
+
+/* Timestamp link */
+.timestamp-link {
+  background: transparent;
+  border: none;
+  color: #dd677b;
+  font-weight: 700;
+  cursor: pointer;
+  padding: 0;
+  font-size: 13px;
+  transition: color 0.2s ease;
+}
+
+.timestamp-link:hover {
+  text-decoration: underline;
+  color: #f472b6;
+}
+
+.inline-ts {
+  color: #60a5fa;
+  cursor: pointer;
+  font-weight: 600;
+  margin: 0 2px;
+}
+
+.inline-ts:hover {
+  text-decoration: underline;
+}

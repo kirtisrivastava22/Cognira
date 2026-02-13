@@ -3,7 +3,7 @@ const questionInput = document.getElementById("question");
 const statusContainer = document.getElementById("status-container");
 const answerContainer = document.getElementById("answer-container");
 const tipsBox = document.getElementById("tips");
-const browserAPI = (typeof browser !== "undefined") ? browser : chrome;
+const browserAPI = typeof browser !== "undefined" ? browser : chrome;
 async function loadVideoTitle() {
   try {
     const [tab] = await browserAPI.tabs.query({
@@ -45,6 +45,28 @@ async function loadVideoTitle() {
 questionInput.focus();
 
 loadVideoTitle();
+document.addEventListener("click", async (e) => {
+  if (!e.target.classList.contains("inline-ts")) return;
+
+  const seconds = parseInt(e.target.dataset.time);
+
+  const [tab] = await browserAPI.tabs.query({
+    active: true,
+    currentWindow: true,
+  });
+
+  browserAPI.scripting.executeScript({
+    target: { tabId: tab.id },
+    func: (time) => {
+      const video = document.querySelector("video");
+      if (video) {
+        video.currentTime = time;
+        video.play();
+      }
+    },
+    args: [seconds],
+  });
+});
 
 questionInput.addEventListener("keydown", (e) => {
   if (e.key === "Enter" && !e.shiftKey) {
@@ -128,38 +150,61 @@ askBtn.onclick = async () => {
             showStatus("Generating answer…", false);
             break;
 
-          case "timestamp": {
-            const { seconds, display } = payload.value;
-            tsEl.innerHTML = `
-          <button class="timestamp-link" id="jump-btn">
-            ⏱ Jump to ${display}
-          </button>
-        `;
+          case "timestamps": {
+            const timestamps = payload.value;
 
-            document.getElementById("jump-btn").onclick = async () => {
-              const [tab] = await browserAPI.tabs.query({
-                active: true,
-                currentWindow: true,
-              });
+            tsEl.innerHTML = timestamps
+              .map(
+                (t) => `
+    <button class="timestamp-link" data-time="${t.seconds}">
+      ⏱ ${t.display}
+    </button>
+  `,
+              )
+              .join("");
 
-              browserAPI.scripting.executeScript({
-                target: { tabId: tab.id },
-                func: (time) => {
-                  const video = document.querySelector("video");
-                  if (video) {
-                    video.currentTime = time;
-                    video.play();
-                  }
-                },
-                args: [seconds],
-              });
-            };
+            document.querySelectorAll(".timestamp-link").forEach((btn) => {
+              btn.onclick = async () => {
+                const seconds = parseInt(btn.dataset.time);
+
+                const [tab] = await browserAPI.tabs.query({
+                  active: true,
+                  currentWindow: true,
+                });
+
+                browserAPI.scripting.executeScript({
+                  target: { tabId: tab.id },
+                  func: (time) => {
+                    const video = document.querySelector("video");
+                    if (video) {
+                      video.currentTime = time;
+                      video.play();
+                    }
+                  },
+                  args: [seconds],
+                });
+              };
+            });
+
             break;
           }
 
-          case "token":
-            answerEl.insertAdjacentText("beforeend", payload.value);
-            break;
+          case "token": {
+  const text = payload.value;
+
+  // detect timestamps like [00:29]
+  const formatted = text.replace(/\[(\d{2}):(\d{2})\]/g, (match, mm, ss) => {
+    const seconds = parseInt(mm) * 60 + parseInt(ss);
+
+    return `<span class="inline-ts" data-time="${seconds}">
+              ${match}
+            </span>`;
+  });
+
+  answerEl.insertAdjacentHTML("beforeend", formatted);
+  break;
+}
+
 
           case "end":
             showStatus("", false);
@@ -226,7 +271,10 @@ document.querySelectorAll(".tab-btn").forEach((btn) => {
 
 // Load chapters
 document.getElementById("load-chapters-btn").onclick = async () => {
-  const [tab] = await browserAPI.tabs.query({ active: true, currentWindow: true });
+  const [tab] = await browserAPI.tabs.query({
+    active: true,
+    currentWindow: true,
+  });
   const videoId = new URL(tab.url).searchParams.get("v");
 
   if (!videoId) {
@@ -292,7 +340,10 @@ let currentQuiz = null;
 let userAnswers = [];
 
 document.getElementById("generate-quiz-btn").onclick = async () => {
-  const [tab] = await browserAPI.tabs.query({ active: true, currentWindow: true });
+  const [tab] = await browserAPI.tabs.query({
+    active: true,
+    currentWindow: true,
+  });
   const videoId = new URL(tab.url).searchParams.get("v");
 
   if (!videoId) {
@@ -324,7 +375,9 @@ document.getElementById("generate-quiz-btn").onclick = async () => {
   }
 };
 function renderQuiz() {
-  const quizHTML = currentQuiz.map((q, qIdx) => `
+  const quizHTML = currentQuiz
+    .map(
+      (q, qIdx) => `
     <div class="quiz-card">
       <div class="quiz-question">
         <span class="quiz-qno">${qIdx + 1}</span>
@@ -332,16 +385,22 @@ function renderQuiz() {
       </div>
 
       <div class="quiz-options">
-  ${q.options.map((opt, optIdx) => `
+  ${q.options
+    .map(
+      (opt, optIdx) => `
     <label class="quiz-option">
       <input type="radio" name="q${qIdx}" value="${optIdx}">
       <span class="option-text">${opt}</span>
     </label>
-  `).join("")}
+  `,
+    )
+    .join("")}
 </div>
 
     </div>
-  `).join("");
+  `,
+    )
+    .join("");
 
   document.getElementById("quiz-container").innerHTML = `
     ${quizHTML}
@@ -350,7 +409,7 @@ function renderQuiz() {
     </button>
   `;
 
-  document.querySelectorAll('input[type="radio"]').forEach(radio => {
+  document.querySelectorAll('input[type="radio"]').forEach((radio) => {
     radio.onchange = (e) => {
       const qIdx = parseInt(e.target.name.replace("q", ""));
       userAnswers[qIdx] = parseInt(e.target.value);
@@ -359,7 +418,6 @@ function renderQuiz() {
 
   document.getElementById("submit-quiz-btn").onclick = submitQuiz;
 }
-
 
 function submitQuiz() {
   let correct = 0;
@@ -372,27 +430,29 @@ function submitQuiz() {
 
   const percentage = Math.round((correct / currentQuiz.length) * 100);
 
-  document.getElementById('quiz-results').innerHTML = `
-  <div class="quiz-score ${percentage >= 60 ? 'pass' : 'fail'}">
+  document.getElementById("quiz-results").innerHTML = `
+  <div class="quiz-score ${percentage >= 60 ? "pass" : "fail"}">
     <h3>Score: ${correct}/${currentQuiz.length}</h3>
     <p>${percentage}%</p>
   </div>
 
   <div class="quiz-review">
-    ${currentQuiz.map((q, idx) => {
-      const userAns = userAnswers[idx];
-      const isCorrect = userAns === q.correct;
+    ${currentQuiz
+      .map((q, idx) => {
+        const userAns = userAnswers[idx];
+        const isCorrect = userAns === q.correct;
 
-      return `
-        <div class="review-card ${isCorrect ? 'correct' : 'wrong'}">
+        return `
+        <div class="review-card ${isCorrect ? "correct" : "wrong"}">
           <div class="review-question">
             ${idx + 1}. ${q.question}
           </div>
 
           <div class="review-answer">
-            ${isCorrect 
-              ? '✅ Correct' 
-              : `❌ Wrong · Correct: <strong>${q.options[q.correct]}</strong>`
+            ${
+              isCorrect
+                ? "✅ Correct"
+                : `❌ Wrong · Correct: <strong>${q.options[q.correct]}</strong>`
             }
           </div>
 
@@ -401,10 +461,10 @@ function submitQuiz() {
           </div>
         </div>
       `;
-    }).join("")}
+      })
+      .join("")}
   </div>
 `;
-
 
   document.getElementById("quiz-results").classList.remove("hidden");
   document.getElementById("quiz-container").innerHTML = "";
@@ -412,7 +472,7 @@ function submitQuiz() {
 document.getElementById("export-pdf-btn").onclick = async () => {
   const [tab] = await browserAPI.tabs.query({
     active: true,
-    currentWindow: true
+    currentWindow: true,
   });
 
   const videoId = new URL(tab.url).searchParams.get("v");
@@ -425,7 +485,7 @@ document.getElementById("export-pdf-btn").onclick = async () => {
 
   const res = await fetch(
     `http://127.0.0.1:8000/export/pdf?video_id=${videoId}`,
-    { method: "POST" }
+    { method: "POST" },
   );
 
   if (!res.ok) {

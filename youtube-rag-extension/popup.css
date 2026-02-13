@@ -7,15 +7,16 @@
 body {
   width: 400px;
   min-height: 520px;
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-  background: linear-gradient(160deg, #E3F2F7, #BECEDB);
+  font-family:
+    -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  background: linear-gradient(160deg, #e3f2f7, #becedb);
   color: #2b2b2b;
 }
 
 /* ===== HEADER ===== */
 .header {
   padding: 20px;
-  background: linear-gradient(135deg, #DD677B, #85285D);
+  background: linear-gradient(135deg, #dd677b, #85285d);
   border-bottom-left-radius: 24px;
   border-bottom-right-radius: 24px;
   box-shadow: 0 12px 30px rgba(133, 40, 93, 0.35);
@@ -48,10 +49,21 @@ body {
   color: #fff;
 }
 
+.inline-ts {
+  color: #60a5fa;
+  cursor: pointer;
+  font-weight: 600;
+  margin: 0 2px;
+}
+
+.inline-ts:hover {
+  text-decoration: underline;
+}
+
 .header p {
   font-size: 12px;
   opacity: 0.9;
-  color: #F5D8BE;
+  color: #f5d8be;
 }
 
 /* ===== CONTAINER ===== */
@@ -63,7 +75,7 @@ body {
 .tabs {
   display: flex;
   gap: 10px;
-  background: rgba(255,255,255,0.7);
+  background: rgba(255, 255, 255, 0.7);
   padding: 8px;
   border-radius: 16px;
   margin-bottom: 18px;
@@ -76,15 +88,15 @@ body {
   border: none;
   background: transparent;
   font-weight: 700;
-  color: #85285D;
+  color: #85285d;
   cursor: pointer;
   transition: all 0.25s ease;
 }
 
 .tab-btn.active {
-  background: linear-gradient(135deg, #DD677B, #85285D);
+  background: linear-gradient(135deg, #dd677b, #85285d);
   color: #fff;
-  box-shadow: 0 8px 20px rgba(133,40,93,0.3);
+  box-shadow: 0 8px 20px rgba(133, 40, 93, 0.3);
 }
 
 /* ===== INPUT ===== */
@@ -93,13 +105,13 @@ body {
   font-weight: 700;
   margin-bottom: 6px;
   display: block;
-  color: #85285D;
+  color: #85285d;
 }
 
 #question {
   width: 100%;
   padding: 14px;
-  background: rgba(255,255,255,0.9);
+  background: rgba(255, 255, 255, 0.9);
   border: 2px solid transparent;
   border-radius: 14px;
   font-size: 14px;
@@ -108,24 +120,25 @@ body {
 }
 
 #question:focus {
-  border-color: #DD677B;
-  box-shadow: 0 0 0 4px rgba(221,103,123,0.25);
+  border-color: #dd677b;
+  box-shadow: 0 0 0 4px rgba(221, 103, 123, 0.25);
 }
 
 /* ===== PRIMARY BUTTON ===== */
 #ask,
 .primary-btn {
   margin-top: 14px;
+  margin-bottom: 8px;
   width: 100%;
   padding: 14px;
   border-radius: 16px;
   border: none;
-  background: linear-gradient(135deg, #DD677B, #85285D);
+  background: linear-gradient(135deg, #dd677b, #85285d);
   color: white;
   font-size: 15px;
   font-weight: 800;
   cursor: pointer;
-  box-shadow: 0 12px 28px rgba(133,40,93,0.4);
+  box-shadow: 0 12px 28px rgba(133, 40, 93, 0.4);
   transition: all 0.25s ease;
 }
 
@@ -135,7 +148,7 @@ body {
 }
 
 #ask:disabled {
-  background: #BECEDB;
+  background: #becedb;
   box-shadow: none;
   cursor: not-allowed;
 }
@@ -149,29 +162,29 @@ body {
 }
 
 .status-box.loading {
-  background: #E3F2F7;
-  color: #85285D;
+  background: #e3f2f7;
+  color: #85285d;
 }
 
 .status-box.error {
-  background: #F5D8BE;
-  color: #85285D;
+  background: #f5d8be;
+  color: #85285d;
 }
 
 /* ===== ANSWER ===== */
 .answer-box {
   margin-top: 18px;
   padding: 16px;
-  background: rgba(255,255,255,0.85);
+  background: rgba(255, 255, 255, 0.85);
   border-radius: 18px;
-  box-shadow: 0 10px 24px rgba(0,0,0,0.08);
+  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.08);
   animation: popIn 0.3s ease;
 }
 
 .answer-header {
   font-size: 13px;
   font-weight: 800;
-  color: #DD677B;
+  color: #dd677b;
   margin-bottom: 10px;
 }
 
@@ -201,7 +214,7 @@ body {
 .chapter-item {
   padding: 14px;
   border-radius: 16px;
-  background: rgba(255,255,255,0.85);
+  background: rgba(255, 255, 255, 0.85);
   margin-bottom: 10px;
   cursor: pointer;
   transition: all 0.25s ease;
@@ -209,12 +222,12 @@ body {
 
 .chapter-item:hover {
   transform: scale(1.02);
-  box-shadow: 0 10px 24px rgba(133,40,93,0.25);
+  box-shadow: 0 10px 24px rgba(133, 40, 93, 0.25);
 }
 
 .chapter-title {
   font-weight: 800;
-  color: #85285D;
+  color: #85285d;
 }
 
 .chapter-time {
@@ -226,19 +239,19 @@ body {
 .quiz-question {
   padding: 16px;
   border-radius: 18px;
-  background: rgba(255,255,255,0.9);
+  background: rgba(255, 255, 255, 0.9);
   margin-bottom: 18px;
 }
 
 .option {
   padding: 12px;
   border-radius: 12px;
-  background: #E3F2F7;
+  background: #e3f2f7;
   cursor: pointer;
 }
 
 .option:hover {
-  background: #F5D8BE;
+  background: #f5d8be;
 }
 
 /* ===== TIPS ===== */
@@ -246,13 +259,13 @@ body {
   margin-top: 22px;
   padding: 16px;
   border-radius: 18px;
-  background: linear-gradient(135deg, #F5D8BE, #E3F2F7);
+  background: linear-gradient(135deg, #f5d8be, #e3f2f7);
 }
 
 .tips-box h3 {
   font-size: 12px;
   font-weight: 800;
-  color: #85285D;
+  color: #85285d;
 }
 
 .tips-box ul {
@@ -265,7 +278,7 @@ body {
   text-align: center;
   font-size: 11px;
   padding: 14px;
-  color: #85285D;
+  color: #85285d;
 }
 
 /* ===== ANIMATION ===== */
@@ -288,19 +301,19 @@ body {
   background: rgba(255, 255, 255, 0.75);
   border-radius: 16px;
   padding: 16px;
-  margin-bottom: 18px;   
+  margin-bottom: 18px;
 }
 .quiz-question {
   font-weight: 600;
   font-size: 14px;
-  margin-bottom: 12px;   
+  margin-bottom: 12px;
   line-height: 1.4;
 }
 
 .quiz-options {
   display: flex;
   flex-direction: column;
-  gap: 12px;   
+  gap: 12px;
 }
 
 .quiz-option {
@@ -311,13 +324,14 @@ body {
   border-radius: 12px;
   background: rgba(255, 255, 255, 0.7);
   cursor: pointer;
-  transition: background 0.2s ease, transform 0.1s ease;
+  transition:
+    background 0.2s ease,
+    transform 0.1s ease;
 }
 
 .quiz-option:hover {
-  box-shadow: 0 4px 10px rgba(0,0,0,0.08);
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.08);
 }
-
 
 .quiz-option input[type="radio"] {
   transform: scale(1.1);

@@ -1,0 +1,114 @@
+.chapters {
+  animation: fadeIn 0.3s ease;
+}
+
+.load-chapters-btn {
+  width: 100%;
+  margin-bottom: 24px;
+}
+
+.chapters-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.chapter-item {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 18px;
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.85);
+  cursor: pointer;
+  transition: all 0.25s ease;
+  animation: slideIn 0.3s ease;
+}
+
+.chapter-item:hover {
+  transform: translateX(8px);
+  box-shadow: 0 10px 24px rgba(133, 40, 93, 0.25);
+  background: rgba(255, 255, 255, 0.95);
+}
+
+.chapter-number {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  border-radius: 12px;
+  background: linear-gradient(135deg, #dd677b, #85285d);
+  color: white;
+  font-weight: 800;
+  font-size: 16px;
+  flex-shrink: 0;
+}
+
+.chapter-content {
+  flex: 1;
+}
+
+.chapter-title {
+  font-weight: 700;
+  font-size: 15px;
+  color: #85285d;
+  margin-bottom: 4px;
+  line-height: 1.4;
+}
+
+.chapter-time {
+  font-size: 12px;
+  color: #666;
+  font-weight: 600;
+}
+
+.chapter-arrow {
+  font-size: 20px;
+  color: #dd677b;
+  opacity: 0;
+  transform: translateX(-10px);
+  transition: all 0.25s ease;
+}
+
+.chapter-item:hover .chapter-arrow {
+  opacity: 1;
+  transform: translateX(0);
+}
+
+.empty-state {
+  text-align: center;
+  padding: 60px 20px;
+  color: #666;
+}
+
+.empty-icon {
+  font-size: 64px;
+  margin-bottom: 16px;
+  opacity: 0.5;
+}
+
+.empty-state p {
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes slideIn {
+  from {
+    opacity: 0;
+    transform: translateX(-20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
