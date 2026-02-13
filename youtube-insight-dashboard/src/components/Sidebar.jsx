@@ -17,7 +17,18 @@ const Sidebar = () => {
     <aside className={`sidebar ${isCollapsed ? 'collapsed' : ''}`}>
       <div className="sidebar-header">
         <div className="logo-container">
-          <div className="logo-icon">▶️</div>
+          <div className="logo-icon">
+            {/* You can use an emoji or place youtube2.png in the public folder */}
+            <img
+              src={`${process.env.PUBLIC_URL}/youtube2.png`}
+              alt="YouTube Icon"
+              onError={(e) => {
+                // Fallback to emoji if image not found
+                e.target.style.display = 'none';
+                e.target.parentElement.innerHTML = '▶️';
+              }}
+            />
+          </div>
           {!isCollapsed && (
             <div className="logo-text">
               <h1>YouTube Insight</h1>

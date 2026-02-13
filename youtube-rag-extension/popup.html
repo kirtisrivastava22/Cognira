@@ -22,15 +22,13 @@
         </div>
         <div>
           <h2>YouTube Insight Assistant</h2>
-          <p>Ask, learn, jump to answers </p>
+          <p>Ask, learn, jump to answers</p>
         </div>
-        <h1 id="video-title"> </h1>
-
+        <h1 id="video-title"></h1>
       </div>
     </div>
 
     <div class="container">
-      <!-- Add this after the question input section -->
       <div class="tabs">
         <button class="tab-btn active" data-tab="ask">Ask Question</button>
         <button class="tab-btn" data-tab="chapters">Chapters</button>
@@ -47,17 +45,14 @@
           ></textarea>
         </div>
 
-        <button id="ask">
-          Ask Question
-        </button>
+        <button id="ask">Ask Question</button>
 
         <div id="status-container"></div>
         <div id="answer-container"></div>
 
         <button id="export-pdf-btn" class="primary-btn">
-  📄 Export Notes as PDF
-</button>
-
+          📄 Export Notes as PDF
+        </button>
       </div>
 
       <div id="chapters-tab" class="tab-content hidden">
@@ -68,9 +63,20 @@
       </div>
 
       <div id="quiz-tab" class="tab-content hidden">
+        <div class="quiz-config">
+          <label for="quiz-question-count">Number of Questions:</label>
+          <select id="quiz-question-count" class="input">
+            <option value="3">3 Questions</option>
+            <option value="5" selected>5 Questions</option>
+            <option value="7">7 Questions</option>
+            <option value="10">10 Questions</option>
+          </select>
+        </div>
+        
         <button id="generate-quiz-btn" class="primary-btn">
-          Generate Quiz (5 Questions)
+          Generate Quiz
         </button>
+        
         <div id="quiz-container"></div>
         <div id="quiz-results" class="hidden"></div>
       </div>
@@ -78,9 +84,9 @@
       <div id="tips" class="tips-box">
         <h3>💡 Tips:</h3>
         <ul>
-          <li> Ask specific questions about the video content</li>
-          <li> Click timestamps to jump to relevant moments</li>
-          <li> Works best with videos that have captions</li>
+          <li>Ask specific questions about the video content</li>
+          <li>Click timestamps in answers to jump to moments</li>
+          <li>Works best with videos that have captions</li>
         </ul>
       </div>
     </div>

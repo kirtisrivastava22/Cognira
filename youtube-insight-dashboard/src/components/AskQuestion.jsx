@@ -4,7 +4,6 @@ import './AskQuestion.css';
 const AskQuestion = ({ videoId }) => {
   const [question, setQuestion] = useState('');
   const [answer, setAnswer] = useState('');
-  const [timestamps, setTimestamps] = useState([]);
   const [status, setStatus] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
@@ -23,7 +22,6 @@ const AskQuestion = ({ videoId }) => {
     }
 
     setAnswer('');
-    setTimestamps([]);
     setError('');
     setIsLoading(true);
     setStatus('Analyzing transcript...');
@@ -44,6 +42,7 @@ const AskQuestion = ({ videoId }) => {
       const reader = response.body.getReader();
       const decoder = new TextDecoder('utf-8');
       let buffer = '';
+      let fullAnswer = '';
 
       while (true) {
         const { value, done } = await reader.read();
@@ -63,13 +62,11 @@ const AskQuestion = ({ videoId }) => {
               setStatus(payload.value);
               break;
 
-            case 'timestamps':
-              setTimestamps(payload.value);
-              break;
-
             case 'token': {
               const text = payload.value;
-              // Process timestamps in the text
+              fullAnswer += text;
+              
+              // Process timestamps in the text - make them clickable
               const formatted = text.replace(/\[(\d{2}):(\d{2})\]/g, (match, mm, ss) => {
                 const seconds = parseInt(mm) * 60 + parseInt(ss);
                 return `<span class="inline-ts" data-time="${seconds}">${match}</span>`;
@@ -79,6 +76,14 @@ const AskQuestion = ({ videoId }) => {
             }
 
             case 'end':
+              // Final pass: ensure ALL timestamps are wrapped (fallback)
+              setAnswer((prev) => {
+                return prev.replace(/\[(\d{2}):(\d{2})\]/g, (match, mm, ss) => {
+                  const seconds = parseInt(mm) * 60 + parseInt(ss);
+                  return `<span class="inline-ts" data-time="${seconds}">${match}</span>`;
+                });
+              });
+              
               setStatus('');
               setIsLoading(false);
               break;
@@ -189,19 +194,6 @@ const AskQuestion = ({ videoId }) => {
               }
             }}
           />
-          {timestamps.length > 0 && (
-            <div className="timestamp-container">
-              {timestamps.map((ts, idx) => (
-                <button
-                  key={idx}
-                  className="timestamp-link"
-                  onClick={() => handleTimestampClick(ts.seconds)}
-                >
-                  ⏱ {ts.display}
-                </button>
-              ))}
-            </div>
-          )}
         </div>
       )}
 

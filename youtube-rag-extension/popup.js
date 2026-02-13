@@ -4,6 +4,7 @@ const statusContainer = document.getElementById("status-container");
 const answerContainer = document.getElementById("answer-container");
 const tipsBox = document.getElementById("tips");
 const browserAPI = typeof browser !== "undefined" ? browser : chrome;
+
 async function loadVideoTitle() {
   try {
     const [tab] = await browserAPI.tabs.query({
@@ -43,8 +44,9 @@ async function loadVideoTitle() {
 }
 
 questionInput.focus();
-
 loadVideoTitle();
+
+// Global click handler for inline timestamps
 document.addEventListener("click", async (e) => {
   if (!e.target.classList.contains("inline-ts")) return;
 
@@ -119,17 +121,16 @@ askBtn.onclick = async () => {
           <span>Answer</span>
         </div>
         <div class="answer-content" id="streamed-answer"></div>
-        <div id="timestamp-container" style="margin-top:8px;"></div>
       </div>
     `;
 
     const answerEl = document.getElementById("streamed-answer");
-    const tsEl = document.getElementById("timestamp-container");
 
     const reader = res.body.getReader();
     const decoder = new TextDecoder("utf-8");
 
     let buffer = "";
+    let fullAnswer = "";
 
     while (true) {
       const { value, done } = await reader.read();
@@ -150,63 +151,28 @@ askBtn.onclick = async () => {
             showStatus("Generating answer…", false);
             break;
 
-          case "timestamps": {
-            const timestamps = payload.value;
+          case "token": {
+            const text = payload.value;
+            fullAnswer += text;
 
-            tsEl.innerHTML = timestamps
-              .map(
-                (t) => `
-    <button class="timestamp-link" data-time="${t.seconds}">
-      ⏱ ${t.display}
-    </button>
-  `,
-              )
-              .join("");
-
-            document.querySelectorAll(".timestamp-link").forEach((btn) => {
-              btn.onclick = async () => {
-                const seconds = parseInt(btn.dataset.time);
-
-                const [tab] = await browserAPI.tabs.query({
-                  active: true,
-                  currentWindow: true,
-                });
-
-                browserAPI.scripting.executeScript({
-                  target: { tabId: tab.id },
-                  func: (time) => {
-                    const video = document.querySelector("video");
-                    if (video) {
-                      video.currentTime = time;
-                      video.play();
-                    }
-                  },
-                  args: [seconds],
-                });
-              };
+            // Detect timestamps like [00:29] and make them clickable inline
+            const formatted = text.replace(/\[(\d{2}):(\d{2})\]/g, (match, mm, ss) => {
+              const seconds = parseInt(mm) * 60 + parseInt(ss);
+              return `<span class="inline-ts" data-time="${seconds}">${match}</span>`;
             });
 
+            answerEl.insertAdjacentHTML("beforeend", formatted);
             break;
           }
 
-          case "token": {
-  const text = payload.value;
-
-  // detect timestamps like [00:29]
-  const formatted = text.replace(/\[(\d{2}):(\d{2})\]/g, (match, mm, ss) => {
-    const seconds = parseInt(mm) * 60 + parseInt(ss);
-
-    return `<span class="inline-ts" data-time="${seconds}">
-              ${match}
-            </span>`;
-  });
-
-  answerEl.insertAdjacentHTML("beforeend", formatted);
-  break;
-}
-
-
           case "end":
+            // Final pass: ensure ALL timestamps are wrapped (fallback)
+            const finalHTML = answerEl.innerHTML.replace(/\[(\d{2}):(\d{2})\]/g, (match, mm, ss) => {
+              const seconds = parseInt(mm) * 60 + parseInt(ss);
+              return `<span class="inline-ts" data-time="${seconds}">${match}</span>`;
+            });
+            answerEl.innerHTML = finalHTML;
+            
             showStatus("", false);
             askBtn.disabled = false;
             break;
@@ -336,8 +302,10 @@ document.getElementById("load-chapters-btn").onclick = async () => {
   }
 };
 
+// Quiz functionality with dynamic question count
 let currentQuiz = null;
 let userAnswers = [];
+let selectedQuestionCount = 5; // Default
 
 document.getElementById("generate-quiz-btn").onclick = async () => {
   const [tab] = await browserAPI.tabs.query({
@@ -351,12 +319,18 @@ document.getElementById("generate-quiz-btn").onclick = async () => {
     return;
   }
 
+  // Get selected question count from dropdown (if exists)
+  const selector = document.getElementById("quiz-question-count");
+  if (selector) {
+    selectedQuestionCount = parseInt(selector.value);
+  }
+
   document.getElementById("quiz-container").innerHTML =
-    '<div class="spinner"></div> Generating quiz...';
+    `<div class="spinner"></div> Generating ${selectedQuestionCount} questions...`;
 
   try {
     const res = await fetch(
-      `http://127.0.0.1:8000/quiz/${videoId}?num_questions=5`,
+      `http://127.0.0.1:8000/quiz/${videoId}?num_questions=${selectedQuestionCount}`,
     );
     const data = await res.json();
 
@@ -374,6 +348,7 @@ document.getElementById("generate-quiz-btn").onclick = async () => {
       '<div class="error-msg">Backend not running</div>';
   }
 };
+
 function renderQuiz() {
   const quizHTML = currentQuiz
     .map(
@@ -469,6 +444,7 @@ function submitQuiz() {
   document.getElementById("quiz-results").classList.remove("hidden");
   document.getElementById("quiz-container").innerHTML = "";
 }
+
 document.getElementById("export-pdf-btn").onclick = async () => {
   const [tab] = await browserAPI.tabs.query({
     active: true,
@@ -480,8 +456,8 @@ document.getElementById("export-pdf-btn").onclick = async () => {
     alert("Open a YouTube video first");
     return;
   }
-  document.getElementById("quiz-container").innerHTML =
-    '<div class="spinner"></div> Generating pdf...';
+
+  showStatus("Generating PDF...", false);
 
   const res = await fetch(
     `http://127.0.0.1:8000/export/pdf?video_id=${videoId}`,
@@ -489,7 +465,7 @@ document.getElementById("export-pdf-btn").onclick = async () => {
   );
 
   if (!res.ok) {
-    alert("Failed to export PDF");
+    showStatus("Failed to export PDF", true);
     return;
   }
 
@@ -504,4 +480,6 @@ document.getElementById("export-pdf-btn").onclick = async () => {
 
   URL.revokeObjectURL(url);
   document.body.removeChild(a);
+  
+  showStatus("", false);
 };

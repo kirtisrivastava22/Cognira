@@ -13,14 +13,14 @@ from app.rag import (
     rerank_docs_by_timestamp_density,
     split_documents,
     load_youtube_docs,
-    llm
 )
 
+from langchain_groq import ChatGroq
 from app.export import router as export_router
 from app.chapters import detect_chapters
 from app.quiz import generate_quiz
 
-from langchain_core.prompts import PromptTemplate
+from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.output_parsers import StrOutputParser
 
 
@@ -48,6 +48,19 @@ class AskRequest(BaseModel):
 
 
 # =========================
+# LLM FOR STREAMING
+# =========================
+
+def get_streaming_llm():
+    return ChatGroq(
+        model="llama-3.1-8b-instant",
+        temperature=0,
+        max_tokens=300,  # Increased for better answers
+        streaming=True
+    )
+
+
+# =========================
 # NORMAL ASK (non-stream)
 # =========================
 
@@ -69,7 +82,7 @@ def ask(req: AskRequest):
 
 
 # =========================
-# STREAMING ASK (INLINE CITATIONS)
+# STREAMING ASK (INLINE CITATIONS ONLY)
 # =========================
 
 @app.post("/ask_stream")
@@ -84,7 +97,7 @@ async def ask_stream(req: AskRequest):
         }) + "\n\n"
 
         # -------------------------
-        # STEP 1 — VECTORSTORE
+        # STEP 1 – VECTORSTORE
         # -------------------------
         db = get_or_create_vectorstore(
             req.video_id,
@@ -100,7 +113,7 @@ async def ask_stream(req: AskRequest):
             return
 
         # -------------------------
-        # STEP 2 — RETRIEVE DOCS
+        # STEP 2 – RETRIEVE DOCS
         # -------------------------
         retriever = db.as_retriever(
             search_type="mmr",
@@ -123,7 +136,7 @@ async def ask_stream(req: AskRequest):
             return
 
         # -------------------------
-        # STEP 3 — FORMAT CONTEXT
+        # STEP 3 – FORMAT CONTEXT
         # -------------------------
         def format_docs(docs):
             formatted = []
@@ -140,34 +153,38 @@ async def ask_stream(req: AskRequest):
         context = format_docs(docs)
 
         # -------------------------
-        # STEP 4 — STRICT PROMPT
+        # STEP 4 – ENHANCED PROMPT WITH SYSTEM MESSAGE
         # -------------------------
-        prompt = PromptTemplate.from_template("""
-You are a strict transcript analyst.
+        prompt = ChatPromptTemplate.from_messages([
+            ("system", """You are a video transcript analyst. Your job is to answer questions using ONLY the transcript provided.
 
-CRITICAL RULES:
-- Use ONLY transcript context
-- Every factual statement MUST include timestamp citations
-- Citation format: [mm:ss]
-- Multiple facts → multiple citations
-- If answer missing → say exactly: I don't know
-- No guessing
-- No general knowledge
-- 2–5 sentences max
+MANDATORY RULES:
+1. ALWAYS include timestamp citations [mm:ss] for every fact
+2. Place timestamps INLINE in your sentences (not at the end)
+3. Use multiple timestamps throughout your answer
+4. If the answer isn't in the transcript, respond: "I don't know"
+5. Keep answers 2-4 sentences
+6. Never use outside knowledge
 
-Context:
+GOOD EXAMPLE:
+"The main concept is introduced at [00:15] where the speaker explains that data preprocessing is crucial [01:30]. The three key steps are outlined at [02:45]."
+
+BAD EXAMPLE:
+"The main concept is data preprocessing and it has three key steps. [00:15]"
+"""),
+            ("user", """Context from video transcript:
 {context}
 
-Question:
-{question}
+Question: {question}
 
-Answer WITH citations:
-""")
+Answer with inline [mm:ss] timestamps:""")
+        ])
 
+        llm = get_streaming_llm()
         chain = prompt | llm | StrOutputParser()
 
         # -------------------------
-        # STEP 5 — STREAM TOKENS
+        # STEP 5 – STREAM TOKENS
         # -------------------------
         answer_text = ""
 
@@ -183,7 +200,7 @@ Answer WITH citations:
             }) + "\n\n"
 
         # -------------------------
-        # STEP 6 — UNKNOWN CHECK
+        # STEP 6 – UNKNOWN CHECK
         # -------------------------
         if "I don't know" in answer_text:
             yield "data: " + json.dumps({
@@ -194,37 +211,7 @@ Answer WITH citations:
             yield "data: " + json.dumps({"type": "end"}) + "\n\n"
             return
 
-        # -------------------------
-        # STEP 7 — EXTRACT INLINE CITATIONS
-        # -------------------------
-        matches = re.findall(r"\[(\d{2}:\d{2})\]", answer_text)
-
-        timestamps = []
-        seen = set()
-
-        for m in matches:
-            mm, ss = map(int, m.split(":"))
-            seconds = mm * 60 + ss
-
-            if seconds in seen:
-                continue
-
-            seen.add(seconds)
-
-            timestamps.append({
-                "seconds": seconds,
-                "display": m
-            })
-
-        # -------------------------
-        # STEP 8 — SEND CITATIONS
-        # -------------------------
-        yield "data: " + json.dumps({
-            "type": "timestamps",
-            "value": timestamps
-        }) + "\n\n"
-
-        # END STREAM
+        # END STREAM (no separate timestamps event)
         yield "data: " + json.dumps({"type": "end"}) + "\n\n"
 
     return StreamingResponse(

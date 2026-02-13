@@ -7,6 +7,7 @@ const Quiz = ({ videoId }) => {
   const [showResults, setShowResults] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [numQuestions, setNumQuestions] = useState(5);
 
   const generateQuiz = async () => {
     setLoading(true);
@@ -14,7 +15,7 @@ const Quiz = ({ videoId }) => {
     setShowResults(false);
 
     try {
-      const response = await fetch(`http://127.0.0.1:8000/quiz/${videoId}?num_questions=5`);
+      const response = await fetch(`http://127.0.0.1:8000/quiz/${videoId}?num_questions=${numQuestions}`);
       const data = await response.json();
 
       if (data.error) {
@@ -70,8 +71,22 @@ const Quiz = ({ videoId }) => {
   if (!quiz) {
     return (
       <div className="quiz-start">
+        <div className="quiz-config">
+          <label htmlFor="num-questions">Number of Questions:</label>
+          <select
+            id="num-questions"
+            className="input"
+            value={numQuestions}
+            onChange={(e) => setNumQuestions(parseInt(e.target.value))}
+          >
+            <option value={3}>3 Questions</option>
+            <option value={5}>5 Questions</option>
+            <option value={7}>7 Questions</option>
+            <option value={10}>10 Questions</option>
+          </select>
+        </div>
         <button className="btn-primary" onClick={generateQuiz}>
-          Generate Quiz (5 Questions)
+          Generate Quiz
         </button>
         {error && (
           <div className="status-box error">
