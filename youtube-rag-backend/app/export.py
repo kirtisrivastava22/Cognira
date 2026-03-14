@@ -1,12 +1,13 @@
 from fastapi import APIRouter
 from fastapi.responses import FileResponse
-from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer
-from reportlab.lib.styles import getSampleStyleSheet
+from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, ListFlowable
+from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.lib.pagesizes import A4
+from reportlab.lib.units import inch
+from reportlab.lib.colors import HexColor
 from pathlib import Path
 from app.rag import ask_youtube_video, load_youtube_docs, split_documents
 import requests
-
 
 router = APIRouter()
 
@@ -14,6 +15,7 @@ router = APIRouter()
 def get_video_metadata(video_id: str):
 
     url = "https://www.youtube.com/oembed"
+
     params = {
         "url": f"https://www.youtube.com/watch?v={video_id}",
         "format": "json"
@@ -41,6 +43,7 @@ def export_pdf(video_id: str):
 
     EXPORT_DIR = Path("exports")
     EXPORT_DIR.mkdir(exist_ok=True)
+
     filename = EXPORT_DIR / f"{video_id}_notes.pdf"
 
     docs = split_documents(load_youtube_docs(video_id))
@@ -48,6 +51,7 @@ def export_pdf(video_id: str):
         return {"error": "Transcript not available"}
 
     meta = get_video_metadata(video_id)
+
     video_title = meta["title"]
     channel_name = meta["channel"]
 
@@ -59,39 +63,78 @@ Create structured STUDY NOTES from this video.
 RULES:
 - Use bullet points
 - Use topic headings
-- Focus on concepts, definitions, processes
-- No storytelling
-- No summary paragraph
-- Write like class notes
-
-FORMAT:
-
-Overview:
-• point
-• point
-
-Key Concepts:
-• concept — explanation
-• concept — explanation
-
-Important Details:
-• detail
-• detail
+- Focus on concepts
+- Do not include transcript
 """
     )["answer"]
 
     styles = getSampleStyleSheet()
-    doc = SimpleDocTemplate(str(filename), pagesize=A4)
+
+    title_style = ParagraphStyle(
+        "TitleStyle",
+        parent=styles["Title"],
+        alignment=1,
+        fontSize=24,
+        textColor=HexColor("#111827")
+    )
+
+    heading_style = ParagraphStyle(
+        "HeadingStyle",
+        parent=styles["Heading2"],
+        textColor=HexColor("#1f2937"),
+        spaceAfter=10
+    )
+
+    bullet_style = ParagraphStyle(
+        "BulletStyle",
+        parent=styles["BodyText"],
+        fontSize=11,
+        leftIndent=5
+    )
+
+    doc = SimpleDocTemplate(
+        str(filename),
+        pagesize=A4,
+        rightMargin=40,
+        leftMargin=40,
+        topMargin=50,
+        bottomMargin=40
+    )
+
     elements = []
 
-    elements.append(Paragraph(video_title, styles["Title"]))
+    elements.append(Paragraph(video_title, title_style))
     elements.append(Spacer(1, 6))
-    elements.append(Paragraph(f"<i>{channel_name}</i>", styles["Heading3"]))
-    elements.append(Spacer(1, 12))
+
+    elements.append(
+        Paragraph(f"<font size=11><i>{channel_name}</i></font>", styles["Normal"])
+    )
+
+    elements.append(Spacer(1, 20))
+
+    section = None
+    bullets = []
 
     for line in notes.split("\n"):
-        elements.append(Paragraph(line, styles["BodyText"]))
-        elements.append(Spacer(1, 4))
+
+        line = line.strip()
+
+        if not line:
+            continue
+
+        if line.endswith(":"):
+            if bullets:
+                elements.append(ListFlowable(bullets, bulletType="bullet"))
+                elements.append(Spacer(1, 12))
+                bullets = []
+
+            elements.append(Paragraph(line, heading_style))
+
+        else:
+            bullets.append(Paragraph(line.replace("•", ""), bullet_style))
+
+    if bullets:
+        elements.append(ListFlowable(bullets, bulletType="bullet"))
 
     doc.build(elements)
 

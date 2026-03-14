@@ -39,15 +39,41 @@ def extract_key_facts(video_id: str):
     
     for sample in samples[:5]:  # Process 5 samples
         prompt = PromptTemplate.from_template("""
-Extract 2-3 specific factual statements from this video segment.
-Focus on: numbers, names, definitions, processes, examples.
+You are extracting QUIZ FACTS from a technical video transcript.
 
-Return ONLY JSON array:
-["Fact 1: Specific detail", "Fact 2: Another detail"]
+Extract 2–3 FACTUAL CONCEPT STATEMENTS.
 
-Segment: {text}
+ONLY include:
+• definitions
+• system components
+• technical concepts
+• architecture
+• processes
+• comparisons
+• numbers related to systems
 
-JSON:""")
+DO NOT include:
+• audience level
+• video topic
+• speaker info
+• channel info
+• greetings
+• opinions
+
+Good examples:
+"Virtual machines run on a hypervisor that manages hardware resources."
+"A load balancer distributes traffic across multiple server instances."
+"Cloud computing provides on-demand computing resources via the internet."
+
+Return ONLY JSON array.
+
+["Fact 1", "Fact 2", "Fact 3"]
+
+Segment:
+{text}
+
+JSON:
+""")
         
         try:
             chain = prompt | llm
@@ -67,27 +93,37 @@ JSON:""")
 def generate_question_from_fact(fact: str):
     """Generate a question from a factual statement"""
     prompt = PromptTemplate.from_template("""
-Convert this fact into a multiple-choice question.
+Create a MULTIPLE CHOICE question that tests understanding of this concept.
 
 Rules:
-- Create a question that tests if someone knows this fact
-- discard generic statements
-- keep only numeric / definition / process facts
-- Questions should be factual and specific (not on what is the name of speaker or channel)
-- Generate 3 plausible but wrong options
-- Make the question specific and clear
+• Question must test the concept in the fact
+• Do NOT ask about the video itself
+• Do NOT ask about audience or speaker
+• Focus on understanding the system or concept
+
+Example:
+Fact: "A load balancer distributes incoming traffic across multiple servers."
+
+Good Question:
+"What is the role of a load balancer in cloud systems?"
+
+Bad Question:
+"What is the topic of the video?"
 
 Return ONLY JSON:
+
 {{
-  "question": "Your question here?",
-  "options": ["Correct answer", "Wrong option 1", "Wrong option 2", "Wrong option 3"],
+  "question": "...",
+  "options": ["correct", "wrong1", "wrong2", "wrong3"],
   "correct": 0,
-  "explanation": "This is correct because..."
+  "explanation": "..."
 }}
 
-Fact: {fact}
+Fact:
+{fact}
 
-JSON:""")
+JSON:
+""")
     
     try:
         chain = prompt | llm
