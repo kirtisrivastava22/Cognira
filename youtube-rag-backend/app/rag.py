@@ -45,7 +45,6 @@ def load_llm():
 
 llm = load_llm()
 
-
 # =========================
 # TRANSCRIPT LOADER
 # =========================

@@ -1,4 +1,3 @@
-from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
@@ -13,7 +12,6 @@ from app.rag import (
     rerank_docs_by_timestamp_density,
     hybrid_retrieve,
     split_documents,
-    load_youtube_docs,
     format_docs_with_timestamps,
     _looks_like_hallucination,
 )
@@ -26,6 +24,22 @@ from app.quiz import generate_quiz
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.output_parsers import StrOutputParser
 
+from fastapi import FastAPI, HTTPException, UploadFile, File, Form
+from fastapi.responses import FileResponse
+from pydantic import BaseModel
+from pathlib import Path
+
+from app.media_manager import (
+    create_media_id,
+    download_from_url,
+    save_uploaded_file,
+    register_media,
+    get_media_meta,
+)
+from app.transcript_service import load_media_docs
+from app.rag import split_documents
+from app.rag import load_youtube_docs
+from app.vectorstore import get_or_create_vectorstore
 
 # =========================
 # APP INIT
@@ -110,7 +124,17 @@ Answer using ONLY the excerpts above (with inline [mm:ss] timestamps), or reply 
 
 @app.post("/ask_stream")
 async def ask_stream(req: AskRequest):
+    def build_docs(media_id: str):
+        meta = get_media_meta(media_id)
 
+        # ✅ If media exists → use Whisper
+        if meta:
+            docs = load_media_docs(media_id)
+            if docs:
+                return split_documents(docs)
+
+        # ✅ fallback → YouTube (UNCHANGED)
+        return split_documents(load_youtube_docs(media_id))
     def token_generator():
 
         yield "data: " + json.dumps({"type": "status", "value": "started"}) + "\n\n"
@@ -118,7 +142,7 @@ async def ask_stream(req: AskRequest):
         # ── Step 1: vectorstore ──────────────────────────────────────
         db = get_or_create_vectorstore(
             req.video_id,
-            docs_builder=lambda vid: split_documents(load_youtube_docs(vid))
+            docs_builder=build_docs
         )
 
         if db is None:
@@ -181,7 +205,49 @@ async def ask_stream(req: AskRequest):
         }
     )
 
+class IngestResponse(BaseModel):
+    media_id: str
+    source_type: str
+    title: str | None = None
 
+
+@app.post("/ingest")
+async def ingest_media(
+    url: str | None = Form(default=None),
+    file: UploadFile | None = File(default=None),
+):
+    if not url and not file:
+        raise HTTPException(status_code=400, detail="Provide either a URL or a file")
+
+    media_id = create_media_id()
+
+    if url:
+        local_path, source_type = download_from_url(url, media_id)
+        meta = {
+            "media_id": media_id,
+            "source_type": source_type,
+            "source_url": url,
+            "local_path": local_path,
+            "title": url,
+        }
+    else:
+        local_path = save_uploaded_file(file, media_id)
+        meta = {
+            "media_id": media_id,
+            "source_type": "upload",
+            "source_url": None,
+            "local_path": local_path,
+            "title": file.filename,
+        }
+
+    register_media(media_id, meta)
+
+    return {
+        "media_id": media_id,
+        "source_type": meta["source_type"],
+        "title": meta["title"],
+    }
+    
 # =========================
 # CHAPTERS
 # =========================
@@ -204,4 +270,4 @@ def get_quiz(video_id: str, num_questions: int = 5):
 # EXPORT
 # =========================
 
-app.include_router(export_router)
+app.include_router(export_router) 
