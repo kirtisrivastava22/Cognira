@@ -156,10 +156,13 @@ askBtn.onclick = async () => {
             fullAnswer += text;
 
             // Detect timestamps like [00:29] and make them clickable inline
-            const formatted = text.replace(/\[(\d{2}):(\d{2})\]/g, (match, mm, ss) => {
-              const seconds = parseInt(mm) * 60 + parseInt(ss);
-              return `<span class="inline-ts" data-time="${seconds}">${match}</span>`;
-            });
+            const formatted = text.replace(
+              /\[(\d{2}):(\d{2})\]/g,
+              (match, mm, ss) => {
+                const seconds = parseInt(mm) * 60 + parseInt(ss);
+                return `<span class="inline-ts" data-time="${seconds}">${match}</span>`;
+              },
+            );
 
             answerEl.insertAdjacentHTML("beforeend", formatted);
             break;
@@ -167,12 +170,15 @@ askBtn.onclick = async () => {
 
           case "end":
             // Final pass: ensure ALL timestamps are wrapped (fallback)
-            const finalHTML = answerEl.innerHTML.replace(/\[(\d{2}):(\d{2})\]/g, (match, mm, ss) => {
-              const seconds = parseInt(mm) * 60 + parseInt(ss);
-              return `<span class="inline-ts" data-time="${seconds}">${match}</span>`;
-            });
+            const finalHTML = answerEl.innerHTML.replace(
+              /\[(\d{2}):(\d{2})\]/g,
+              (match, mm, ss) => {
+                const seconds = parseInt(mm) * 60 + parseInt(ss);
+                return `<span class="inline-ts" data-time="${seconds}">${match}</span>`;
+              },
+            );
             answerEl.innerHTML = finalHTML;
-            
+
             showStatus("", false);
             askBtn.disabled = false;
             break;
@@ -445,7 +451,7 @@ function submitQuiz() {
   document.getElementById("quiz-container").innerHTML = "";
 }
 
-document.getElementById("export-pdf-btn").onclick = async () => {
+document.getElementById("export-docx-btn").onclick = async () => {
   const [tab] = await browserAPI.tabs.query({
     active: true,
     currentWindow: true,
@@ -457,29 +463,39 @@ document.getElementById("export-pdf-btn").onclick = async () => {
     return;
   }
 
-  showStatus("Generating PDF...", false);
+  showStatus("Generating DOCX...", false);
 
   const res = await fetch(
-    `http://127.0.0.1:8000/export/pdf?video_id=${videoId}`,
+    `http://127.0.0.1:8000/export/docx?video_id=${videoId}`,
     { method: "POST" },
   );
 
   if (!res.ok) {
-    showStatus("Failed to export PDF", true);
+    showStatus("Failed to export DOCX", true);
     return;
   }
 
-  const blob = await res.blob();
+  const blob = new Blob([await res.arrayBuffer()], {
+    type: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+  });
   const url = URL.createObjectURL(blob);
 
   const a = document.createElement("a");
   a.href = url;
-  a.download = `${videoId}_notes.pdf`;
+  const disposition = res.headers.get("Content-Disposition");
+
+  let filename = `${videoId}_notes.docx`;
+
+  if (disposition && disposition.includes("filename=")) {
+    filename = disposition.split("filename=")[1].replace(/"/g, "");
+  }
+
+  a.download = filename;
   document.body.appendChild(a);
   a.click();
 
   URL.revokeObjectURL(url);
   document.body.removeChild(a);
-  
+
   showStatus("", false);
 };

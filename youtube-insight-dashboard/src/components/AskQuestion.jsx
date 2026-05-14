@@ -1,12 +1,12 @@
-import React, { useState, useRef, useEffect } from 'react';
-import './AskQuestion.css';
+import React, { useState, useRef, useEffect } from "react";
+import "./AskQuestion.css";
 
 const AskQuestion = ({ videoId }) => {
-  const [question, setQuestion] = useState('');
-  const [answer, setAnswer] = useState('');
-  const [status, setStatus] = useState('');
+  const [question, setQuestion] = useState("");
+  const [answer, setAnswer] = useState("");
+  const [status, setStatus] = useState("");
   const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState('');
+  const [error, setError] = useState("");
   const answerRef = useRef(null);
 
   useEffect(() => {
@@ -17,65 +17,68 @@ const AskQuestion = ({ videoId }) => {
 
   const handleAsk = async () => {
     if (!question.trim()) {
-      setError('Please enter a question');
+      setError("Please enter a question");
       return;
     }
 
-    setAnswer('');
-    setError('');
+    setAnswer("");
+    setError("");
     setIsLoading(true);
-    setStatus('Analyzing transcript...');
+    setStatus("Analyzing transcript...");
 
     try {
-      const response = await fetch('http://127.0.0.1:8000/ask_stream', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+      const response = await fetch("http://127.0.0.1:8000/ask_stream", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ video_id: videoId, question }),
       });
 
       if (!response.ok) {
-        throw new Error('Failed to get response');
+        throw new Error("Failed to get response");
       }
 
-      setStatus('Generating answer...');
+      setStatus("Generating answer...");
 
       const reader = response.body.getReader();
-      const decoder = new TextDecoder('utf-8');
-      let buffer = '';
-      let fullAnswer = '';
+      const decoder = new TextDecoder("utf-8");
+      let buffer = "";
+      let fullAnswer = "";
 
       while (true) {
         const { value, done } = await reader.read();
         if (done) break;
 
         buffer += decoder.decode(value, { stream: true });
-        const events = buffer.split('\n\n');
+        const events = buffer.split("\n\n");
         buffer = events.pop();
 
         for (const event of events) {
-          if (!event.startsWith('data: ')) continue;
+          if (!event.startsWith("data: ")) continue;
 
           const payload = JSON.parse(event.slice(6));
 
           switch (payload.type) {
-            case 'status':
+            case "status":
               setStatus(payload.value);
               break;
 
-            case 'token': {
+            case "token": {
               const text = payload.value;
               fullAnswer += text;
-              
+
               // Process timestamps in the text - make them clickable
-              const formatted = text.replace(/\[(\d{2}):(\d{2})\]/g, (match, mm, ss) => {
-                const seconds = parseInt(mm) * 60 + parseInt(ss);
-                return `<span class="inline-ts" data-time="${seconds}">${match}</span>`;
-              });
+              const formatted = text.replace(
+                /\[(\d{2}):(\d{2})\]/g,
+                (match, mm, ss) => {
+                  const seconds = parseInt(mm) * 60 + parseInt(ss);
+                  return `<span class="inline-ts" data-time="${seconds}">${match}</span>`;
+                },
+              );
               setAnswer((prev) => prev + formatted);
               break;
             }
 
-            case 'end':
+            case "end":
               // Final pass: ensure ALL timestamps are wrapped (fallback)
               setAnswer((prev) => {
                 return prev.replace(/\[(\d{2}):(\d{2})\]/g, (match, mm, ss) => {
@@ -83,8 +86,8 @@ const AskQuestion = ({ videoId }) => {
                   return `<span class="inline-ts" data-time="${seconds}">${match}</span>`;
                 });
               });
-              
-              setStatus('');
+
+              setStatus("");
               setIsLoading(false);
               break;
 
@@ -94,15 +97,17 @@ const AskQuestion = ({ videoId }) => {
         }
       }
     } catch (err) {
-      console.error('Error:', err);
-      setError('Failed to connect to backend. Make sure the server is running on http://127.0.0.1:8000');
+      console.error("Error:", err);
+      setError(
+        "Failed to connect to backend. Make sure the server is running on http://127.0.0.1:8000",
+      );
       setIsLoading(false);
-      setStatus('');
+      setStatus("");
     }
   };
 
   const handleKeyPress = (e) => {
-    if (e.key === 'Enter' && !e.shiftKey) {
+    if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
       handleAsk();
     }
@@ -110,35 +115,62 @@ const AskQuestion = ({ videoId }) => {
 
   const handleTimestampClick = (seconds) => {
     // Open YouTube video at specific timestamp
-    window.open(`https://www.youtube.com/watch?v=${videoId}&t=${seconds}s`, '_blank');
+    window.open(
+      `https://www.youtube.com/watch?v=${videoId}&t=${seconds}s`,
+      "_blank",
+    );
   };
 
-  const handleExportPDF = async () => {
-    try {
-      setStatus('Generating PDF...');
-      const response = await fetch(`http://127.0.0.1:8000/export/pdf?video_id=${videoId}`, {
+  const handleExportDOCX = async () => {
+  try {
+    setStatus('Generating DOCX...');
+
+    const response = await fetch(
+      `http://127.0.0.1:8000/export/docx?video_id=${videoId}`,
+      {
         method: 'POST',
-      });
-
-      if (!response.ok) {
-        throw new Error('Failed to export PDF');
       }
+    );
 
-      const blob = await response.blob();
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `${videoId}_notes.pdf`;
-      document.body.appendChild(a);
-      a.click();
-      URL.revokeObjectURL(url);
-      document.body.removeChild(a);
-      setStatus('');
-    } catch (err) {
-      console.error('Export error:', err);
-      setError('Failed to export PDF');
+    if (!response.ok) {
+      throw new Error('Failed to export DOCX');
     }
-  };
+
+    // ✅ Correct binary handling
+    const buffer = await response.arrayBuffer();
+
+    const blob = new Blob([buffer], {
+      type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    });
+
+    const url = URL.createObjectURL(blob);
+
+    const a = document.createElement('a');
+    a.href = url;
+
+    // ✅ Smart filename (from backend if available)
+    let filename = `${videoId}_notes.docx`;
+    const disposition = response.headers.get('Content-Disposition');
+
+    if (disposition && disposition.includes('filename=')) {
+      filename = disposition.split('filename=')[1].replace(/"/g, '');
+    }
+
+    a.download = filename;
+
+    document.body.appendChild(a);
+    a.click();
+
+    URL.revokeObjectURL(url);
+    document.body.removeChild(a);
+
+    setStatus('');
+  } catch (err) {
+    console.error('Export error:', err);
+    setError('Failed to export DOCX');
+    setStatus('');
+  }
+};
 
   return (
     <div className="ask-question">
@@ -163,7 +195,7 @@ const AskQuestion = ({ videoId }) => {
             Analyzing...
           </>
         ) : (
-          'Ask Question'
+          "Ask Question"
         )}
       </button>
 
@@ -188,7 +220,7 @@ const AskQuestion = ({ videoId }) => {
             ref={answerRef}
             dangerouslySetInnerHTML={{ __html: answer }}
             onClick={(e) => {
-              if (e.target.classList.contains('inline-ts')) {
+              if (e.target.classList.contains("inline-ts")) {
                 const seconds = parseInt(e.target.dataset.time);
                 handleTimestampClick(seconds);
               }
@@ -197,8 +229,8 @@ const AskQuestion = ({ videoId }) => {
         </div>
       )}
 
-      <button className="btn-primary export-btn" onClick={handleExportPDF}>
-        📄 Export Notes as PDF
+      <button className="btn-primary export-btn" onClick={handleExportDOCX}>
+        📝 Export Notes as DOCX
       </button>
     </div>
   );

@@ -3,3 +3,4 @@ vectorstores
 .env
 exports
 cache
+node_modules/

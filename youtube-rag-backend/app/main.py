@@ -11,8 +11,11 @@ from app.rag import (
     build_rag_chain,
     get_or_create_vectorstore,
     rerank_docs_by_timestamp_density,
+    hybrid_retrieve,
     split_documents,
     load_youtube_docs,
+    format_docs_with_timestamps,
+    _looks_like_hallucination,
 )
 
 from langchain_groq import ChatGroq
@@ -38,6 +41,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+
 # =========================
 # REQUEST MODEL
 # =========================
@@ -55,7 +59,7 @@ def get_streaming_llm():
     return ChatGroq(
         model="llama-3.1-8b-instant",
         temperature=0,
-        max_tokens=300,  # Increased for better answers
+        max_tokens=400,
         streaming=True
     )
 
@@ -82,23 +86,36 @@ def ask(req: AskRequest):
 
 
 # =========================
-# STREAMING ASK (INLINE CITATIONS ONLY)
+# STREAMING ASK
 # =========================
+
+# Stricter system prompt — the critical change for stopping hallucinations
+_STREAM_SYSTEM = """You are a strict transcript analyst. Your ONLY knowledge source is the transcript excerpts the user provides.
+
+ABSOLUTE RULES — never break them:
+1. Use ONLY information stated in the provided transcript excerpts. Zero outside knowledge.
+2. If the transcript does not clearly contain the answer, reply with exactly: I don't know
+3. Every factual claim must have an inline timestamp [mm:ss] taken from the excerpt headers.
+4. Do NOT invent, infer, extrapolate, or guess. If you are uncertain, say "I don't know".
+5. Keep your answer to 2–5 sentences.
+6. Do not repeat the question or explain what you cannot do."""
+
+_STREAM_USER = """Transcript excerpts (each line starts with its timestamp):
+{context}
+
+Question: {question}
+
+Answer using ONLY the excerpts above (with inline [mm:ss] timestamps), or reply "I don't know":"""
+
 
 @app.post("/ask_stream")
 async def ask_stream(req: AskRequest):
 
     def token_generator():
 
-        # STATUS START
-        yield "data: " + json.dumps({
-            "type": "status",
-            "value": "started"
-        }) + "\n\n"
+        yield "data: " + json.dumps({"type": "status", "value": "started"}) + "\n\n"
 
-        # -------------------------
-        # STEP 1 – VECTORSTORE
-        # -------------------------
+        # ── Step 1: vectorstore ──────────────────────────────────────
         db = get_or_create_vectorstore(
             req.video_id,
             docs_builder=lambda vid: split_documents(load_youtube_docs(vid))
@@ -107,24 +124,13 @@ async def ask_stream(req: AskRequest):
         if db is None:
             yield "data: " + json.dumps({
                 "type": "answer",
-                "value": "I don't know. No transcript available."
+                "value": "I don't know — no transcript is available for this video."
             }) + "\n\n"
             yield "data: " + json.dumps({"type": "end"}) + "\n\n"
             return
 
-        # -------------------------
-        # STEP 2 – RETRIEVE DOCS
-        # -------------------------
-        retriever = db.as_retriever(
-            search_type="mmr",
-            search_kwargs={
-                "k": 18,
-                "fetch_k": 60,
-                "lambda_mult": 0.4
-            }
-        )
-
-        docs = retriever.invoke(req.question)
+        # ── Step 2: hybrid retrieval + rerank ────────────────────────
+        docs = hybrid_retrieve(db, req.question, k=14)
         docs = rerank_docs_by_timestamp_density(docs)
 
         if not docs:
@@ -135,83 +141,34 @@ async def ask_stream(req: AskRequest):
             yield "data: " + json.dumps({"type": "end"}) + "\n\n"
             return
 
-        # -------------------------
-        # STEP 3 – FORMAT CONTEXT
-        # -------------------------
-        def format_docs(docs):
-            formatted = []
-            for doc in docs:
-                ts = doc.metadata.get("start", 0)
-                mm, ss = divmod(ts, 60)
+        # ── Step 3: format context ───────────────────────────────────
+        context = format_docs_with_timestamps(docs)
 
-                formatted.append(
-                    f"[{mm:02d}:{ss:02d}] {doc.page_content}"
-                )
-
-            return "\n\n".join(formatted)
-
-        context = format_docs(docs)
-
-        # -------------------------
-        # STEP 4 – ENHANCED PROMPT WITH SYSTEM MESSAGE
-        # -------------------------
+        # ── Step 4: build prompt and stream ─────────────────────────
         prompt = ChatPromptTemplate.from_messages([
-            ("system", """You are a video transcript analyst. Your job is to answer questions using ONLY the transcript provided.
-
-MANDATORY RULES:
-1. ALWAYS include timestamp citations [mm:ss] for every fact
-2. Place timestamps INLINE in your sentences (not at the end)
-3. Use multiple timestamps throughout your answer
-4. If the answer isn't in the transcript, respond: "I don't know"
-5. Keep answers 2-4 sentences
-6. Never use outside knowledge
-
-GOOD EXAMPLE:
-"The main concept is introduced at [00:15] where the speaker explains that data preprocessing is crucial [01:30]. The three key steps are outlined at [02:45]."
-
-BAD EXAMPLE:
-"The main concept is data preprocessing and it has three key steps. [00:15]"
-"""),
-            ("user", """Context from video transcript:
-{context}
-
-Question: {question}
-
-Answer with inline [mm:ss] timestamps:""")
+            ("system", _STREAM_SYSTEM),
+            ("user", _STREAM_USER)
         ])
 
         llm = get_streaming_llm()
         chain = prompt | llm | StrOutputParser()
 
-        # -------------------------
-        # STEP 5 – STREAM TOKENS
-        # -------------------------
         answer_text = ""
-
-        for token in chain.stream({
-            "context": context,
-            "question": req.question
-        }):
+        for token in chain.stream({"context": context, "question": req.question}):
             answer_text += token
+            yield "data: " + json.dumps({"type": "token", "value": token}) + "\n\n"
 
+        # ── Step 5: post-generation quality guard ────────────────────
+        is_idk = "i don't know" in answer_text.lower()
+        is_hallucination = _looks_like_hallucination(answer_text, docs)
+
+        if is_idk or is_hallucination:
+            # Signal the frontend to replace the streamed text
             yield "data: " + json.dumps({
-                "type": "token",
-                "value": token
+                "type": "correction",
+                "value": "I don't know — the video does not contain enough information to answer this."
             }) + "\n\n"
 
-        # -------------------------
-        # STEP 6 – UNKNOWN CHECK
-        # -------------------------
-        if "I don't know" in answer_text:
-            yield "data: " + json.dumps({
-                "type": "answer",
-                "value": "I don't know. The video does not contain this information."
-            }) + "\n\n"
-
-            yield "data: " + json.dumps({"type": "end"}) + "\n\n"
-            return
-
-        # END STREAM (no separate timestamps event)
         yield "data: " + json.dumps({"type": "end"}) + "\n\n"
 
     return StreamingResponse(
