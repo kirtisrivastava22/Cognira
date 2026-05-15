@@ -1,7 +1,10 @@
 import React, { useState, useRef, useEffect } from "react";
 import "./AskQuestion.css";
 
-const AskQuestion = ({ videoId }) => {
+const AskQuestion = ({ videoData }) => {
+  const videoId = videoData?.videoId || "";
+  const sourceType = videoData?.sourceType || "youtube";
+
   const [question, setQuestion] = useState("");
   const [answer, setAnswer] = useState("");
   const [status, setStatus] = useState("");
@@ -42,7 +45,6 @@ const AskQuestion = ({ videoId }) => {
       const reader = response.body.getReader();
       const decoder = new TextDecoder("utf-8");
       let buffer = "";
-      let fullAnswer = "";
 
       while (true) {
         const { value, done } = await reader.read();
@@ -64,9 +66,6 @@ const AskQuestion = ({ videoId }) => {
 
             case "token": {
               const text = payload.value;
-              fullAnswer += text;
-
-              // Process timestamps in the text - make them clickable
               const formatted = text.replace(
                 /\[(\d{2}):(\d{2})\]/g,
                 (match, mm, ss) => {
@@ -78,15 +77,11 @@ const AskQuestion = ({ videoId }) => {
               break;
             }
 
-            case "end":
-              // Final pass: ensure ALL timestamps are wrapped (fallback)
-              setAnswer((prev) => {
-                return prev.replace(/\[(\d{2}):(\d{2})\]/g, (match, mm, ss) => {
-                  const seconds = parseInt(mm) * 60 + parseInt(ss);
-                  return `<span class="inline-ts" data-time="${seconds}">${match}</span>`;
-                });
-              });
+            case "correction":
+              setAnswer(payload.value);
+              break;
 
+            case "end":
               setStatus("");
               setIsLoading(false);
               break;
@@ -114,94 +109,108 @@ const AskQuestion = ({ videoId }) => {
   };
 
   const handleTimestampClick = (seconds) => {
-    // Open YouTube video at specific timestamp
-    window.open(
-      `https://www.youtube.com/watch?v=${videoId}&t=${seconds}s`,
-      "_blank",
+    if (sourceType === "youtube") {
+      window.open(`https://www.youtube.com/watch?v=${videoId}&t=${seconds}s`, "_blank");
+      return;
+    }
+
+    window.dispatchEvent(
+      new CustomEvent("knowitfast:timestamp", {
+        detail: { seconds, videoId },
+      }),
     );
   };
 
   const handleExportDOCX = async () => {
-  try {
-    setStatus('Generating DOCX...');
+    try {
+      setStatus("Generating DOCX...");
 
-    const response = await fetch(
-      `http://127.0.0.1:8000/export/docx?video_id=${videoId}`,
-      {
-        method: 'POST',
+      const response = await fetch(
+        `http://127.0.0.1:8000/export/docx?video_id=${videoId}`,
+        { method: "POST" },
+      );
+
+      if (!response.ok) {
+        throw new Error("Failed to export DOCX");
       }
-    );
 
-    if (!response.ok) {
-      throw new Error('Failed to export DOCX');
+      const buffer = await response.arrayBuffer();
+      const blob = new Blob([buffer], {
+        type: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+      });
+
+      const url = URL.createObjectURL(blob);
+
+      const a = document.createElement("a");
+      a.href = url;
+
+      let filename = `${videoId}_notes.docx`;
+      const disposition = response.headers.get("Content-Disposition");
+
+      if (disposition && disposition.includes("filename=")) {
+        filename = disposition.split("filename=")[1].replace(/"/g, "");
+      }
+
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+
+      URL.revokeObjectURL(url);
+      document.body.removeChild(a);
+
+      setStatus("");
+    } catch (err) {
+      console.error("Export error:", err);
+      setError("Failed to export DOCX");
+      setStatus("");
     }
-
-    // ✅ Correct binary handling
-    const buffer = await response.arrayBuffer();
-
-    const blob = new Blob([buffer], {
-      type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-    });
-
-    const url = URL.createObjectURL(blob);
-
-    const a = document.createElement('a');
-    a.href = url;
-
-    // ✅ Smart filename (from backend if available)
-    let filename = `${videoId}_notes.docx`;
-    const disposition = response.headers.get('Content-Disposition');
-
-    if (disposition && disposition.includes('filename=')) {
-      filename = disposition.split('filename=')[1].replace(/"/g, '');
-    }
-
-    a.download = filename;
-
-    document.body.appendChild(a);
-    a.click();
-
-    URL.revokeObjectURL(url);
-    document.body.removeChild(a);
-
-    setStatus('');
-  } catch (err) {
-    console.error('Export error:', err);
-    setError('Failed to export DOCX');
-    setStatus('');
-  }
-};
+  };
 
   return (
-    <div className="ask-question">
+    <div className="glass-card pad-lg">
+      <div className="card-row" style={{ marginBottom: 16 }}>
+        <div className="chip">Ask AI</div>
+        <div className="chip">
+          {sourceType === "youtube" ? "YouTube" : "Uploaded media"}
+        </div>
+      </div>
+
       <div className="input-group">
-        <label htmlFor="question-input">Your Question</label>
+        <label htmlFor="question-input" className="section-title" style={{ display: "block" }}>
+          Your Question
+        </label>
         <textarea
           id="question-input"
-          className="textarea"
-          rows="3"
-          placeholder="What is this video about?"
+          className="textarea-field"
+          rows="4"
+          placeholder="What is this content about? Ask anything..."
           value={question}
           onChange={(e) => setQuestion(e.target.value)}
-          onKeyPress={handleKeyPress}
+          onKeyDown={handleKeyPress}
           disabled={isLoading}
         />
       </div>
 
-      <button className="btn-primary" onClick={handleAsk} disabled={isLoading}>
-        {isLoading ? (
-          <>
-            <span className="spinner"></span>
-            Analyzing...
-          </>
-        ) : (
-          "Ask Question"
-        )}
-      </button>
+      <div className="hero-actions" style={{ marginTop: 14 }}>
+        <button className="btn-primary" onClick={handleAsk} disabled={isLoading}>
+          {isLoading ? (
+            <>
+              <span className="spinner" style={{ marginRight: 8 }} />
+              Analyzing...
+            </>
+          ) : (
+            "Ask Question"
+          )}
+        </button>
+
+        <button className="btn-secondary" onClick={handleExportDOCX}>
+           Export Notes as DOCX
+        </button>
+      </div>
 
       {status && (
         <div className="status-box loading">
-          <span className="spinner"></span>
+          <span className="spinner" />
           <span>{status}</span>
         </div>
       )}
@@ -213,25 +222,26 @@ const AskQuestion = ({ videoId }) => {
       )}
 
       {answer && (
-        <div className="answer-box">
-          <div className="answer-header">Answer</div>
+        <div className="answer-box" style={{ marginTop: 16 }}>
+          <div className="answer-header">
+            <span className="section-title" style={{ margin: 0 }}>
+              Answer
+            </span>
+          </div>
+
           <div
             className="answer-content"
             ref={answerRef}
             dangerouslySetInnerHTML={{ __html: answer }}
             onClick={(e) => {
               if (e.target.classList.contains("inline-ts")) {
-                const seconds = parseInt(e.target.dataset.time);
+                const seconds = parseInt(e.target.dataset.time, 10);
                 handleTimestampClick(seconds);
               }
             }}
           />
         </div>
       )}
-
-      <button className="btn-primary export-btn" onClick={handleExportDOCX}>
-        📝 Export Notes as DOCX
-      </button>
     </div>
   );
 };

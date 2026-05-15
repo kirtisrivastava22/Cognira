@@ -1,70 +1,79 @@
-import React, { useState } from 'react';
-import { Link, useLocation } from 'react-router-dom';
-import './Sidebar.css';
+import React from "react";
+import { NavLink } from "react-router-dom";
 
-const Sidebar = () => {
-  const location = useLocation();
-  const [isCollapsed, setIsCollapsed] = useState(false);
-
-  const navItems = [
-    { path: '/', icon: '🏠', label: 'Dashboard' },
-    { path: '/analyze', icon: '🎬', label: 'Analyze Video' },
-    { path: '/history', icon: '📚', label: 'History' },
-    { path: '/settings', icon: '⚙️', label: 'Settings' },
-  ];
-
+const Sidebar = ({ isSignedIn, user, onOpenAuth, onSignOut }) => {
   return (
-    <aside className={`sidebar ${isCollapsed ? 'collapsed' : ''}`}>
-      <div className="sidebar-header">
-        <div className="logo-container">
-          <div className="logo-icon">
-            {/* You can use an emoji or place youtube2.png in the public folder */}
-            <img
-              src={`${process.env.PUBLIC_URL}/youtube2.png`}
-              alt="YouTube Icon"
-              onError={(e) => {
-                // Fallback to emoji if image not found
-                e.target.style.display = 'none';
-                e.target.parentElement.innerHTML = '▶️';
-              }}
-            />
+    <aside className="sidebar-shell">
+      <div className="sidebar-top">
+        <div className="side-brand">
+          
+          <div>
+            <p className="side-brand-title gradient-text">KnowItFast</p>
+            <p className="side-brand-subtitle">Skip the content. Keep the knowledge.</p>
           </div>
-          {!isCollapsed && (
-            <div className="logo-text">
-              <h1>YouTube Insight</h1>
-              <p>Assistant</p>
-            </div>
-          )}
         </div>
-        <button 
-          className="collapse-btn"
-          onClick={() => setIsCollapsed(!isCollapsed)}
-          aria-label={isCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
-        >
-          {isCollapsed ? '→' : '←'}
-        </button>
-      </div>
 
-      <nav className="sidebar-nav">
-        {navItems.map((item) => (
-          <Link
-            key={item.path}
-            to={item.path}
-            className={`nav-item ${location.pathname === item.path ? 'active' : ''}`}
+        <nav className="side-nav">
+          <NavLink
+            to="/"
+            className={({ isActive }) => `nav-pill ${isActive ? "active" : ""}`}
           >
-            <span className="nav-icon">{item.icon}</span>
-            {!isCollapsed && <span className="nav-label">{item.label}</span>}
-          </Link>
-        ))}
-      </nav>
+            
+            <span>Dashboard</span>
+          </NavLink>
 
-      <div className="sidebar-footer">
-        {!isCollapsed && (
-          <div className="footer-content">
-            <p className="footer-text">Powered by RAG • FastAPI • LangChain</p>
+          <NavLink
+            to="/analyze"
+            className={({ isActive }) => `nav-pill ${isActive ? "active" : ""}`}
+          >
+            
+            <span>Analyze</span>
+          </NavLink>
+
+          <NavLink
+            to="/history"
+            className={({ isActive }) => `nav-pill ${isActive ? "active" : ""}`}
+          >
+            
+            <span>History</span>
+          </NavLink>
+
+          <NavLink
+            to="/settings"
+            className={({ isActive }) => `nav-pill ${isActive ? "active" : ""}`}
+          >
+            
+            <span>Settings</span>
+          </NavLink>
+        </nav>
+
+        {isSignedIn ? (
+          <div className="glass-card side-profile-card">
+            <p className="side-profile-name">{user?.name || "Signed in"}</p>
+            <p className="side-profile-email">{user?.email || "Synced account"}</p>
+            <div style={{ height: 12 }} />
+            <button className="btn-secondary" onClick={onSignOut}>
+              Sign out
+            </button>
+          </div>
+        ) : (
+          <div className="glass-card side-auth-card">
+            <p className="side-profile-name">Guest mode</p>
+            <p className="side-profile-email">
+              Use the app freely, or sign in to sync your history.
+            </p>
+            <div style={{ height: 12 }} />
+            <button className="btn-primary" onClick={onOpenAuth}>
+              Sign in
+            </button>
           </div>
         )}
       </div>
+
+      <div className="side-footer">
+        <div>Built for videos, audio, lectures, and uploads.</div>
+      </div>
+      
     </aside>
   );
 };

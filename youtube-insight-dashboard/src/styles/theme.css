@@ -1,0 +1,185 @@
+/* 🌌 Root Theme Colors */
+:root {
+  --bg-dark: #0b0f1a;
+  --glass-bg: rgba(255, 255, 255, 0.05);
+  --glass-border: rgba(255, 255, 255, 0.1);
+
+  --text-primary: #e6eaf2;
+  --text-secondary: #9ca3af;
+
+  --accent-purple: #7c3aed;
+  --accent-cyan: #06b6d4;
+
+  --glow-purple: rgba(124, 58, 237, 0.5);
+  --glow-cyan: rgba(6, 182, 212, 0.5);
+}
+
+/* 🌌 Base */
+body {
+  margin: 0;
+  background-color: var(--bg-dark);
+  color: var(--text-primary);
+  font-family: 'Inter', sans-serif;
+}
+
+/* 🧊 Glass Card */
+.glass-card {
+  background: var(--glass-bg);
+  border: 1px solid var(--glass-border);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  border-radius: 16px;
+  padding: 20px;
+  transition: all 0.3s ease;
+}
+
+.glass-card:hover {
+  transform: translateY(-4px) scale(1.01);
+  box-shadow: 0 0 25px var(--glow-purple);
+}
+
+/* ✨ Buttons */
+.btn-primary {
+  background: linear-gradient(135deg, var(--accent-purple), var(--accent-cyan));
+  border: none;
+  border-radius: 10px;
+  padding: 12px;
+  color: white;
+  font-weight: 600;
+  cursor: pointer;
+  transition: 0.3s ease;
+}
+
+.btn-primary:hover {
+  opacity: 0.9;
+  box-shadow: 0 0 15px var(--glow-purple);
+}
+
+.btn-secondary {
+  background: linear-gradient(135deg, var(--accent-cyan), var(--accent-purple));
+  border: none;
+  border-radius: 10px;
+  padding: 12px;
+  color: white;
+  font-weight: 600;
+  cursor: pointer;
+  transition: 0.3s ease;
+}
+
+.btn-secondary:hover {
+  opacity: 0.9;
+  box-shadow: 0 0 15px var(--glow-cyan);
+}
+
+/* 🧠 Inputs */
+.input-field {
+  width: 100%;
+  padding: 12px;
+  border-radius: 10px;
+  background: rgba(0, 0, 0, 0.4);
+  border: 1px solid var(--glass-border);
+  color: var(--text-primary);
+  outline: none;
+  transition: 0.3s;
+}
+
+.input-field:focus {
+  border-color: var(--accent-purple);
+  box-shadow: 0 0 10px var(--glow-purple);
+}
+
+/* 📄 Text */
+.text-secondary {
+  color: var(--text-secondary);
+}
+
+/* 🌟 Section Title */
+.section-title {
+  font-size: 1.3rem;
+  font-weight: 600;
+  margin-bottom: 8px;
+}
+
+/* 🌈 Gradient Title */
+.gradient-text {
+  background: linear-gradient(to right, var(--accent-purple), var(--accent-cyan));
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+/* 📦 List Items */
+.list-item {
+  padding: 12px;
+  border-radius: 10px;
+  background: rgba(0, 0, 0, 0.3);
+  border: 1px solid var(--glass-border);
+  transition: 0.3s;
+  cursor: pointer;
+}
+
+.list-item:hover {
+  background: rgba(0, 0, 0, 0.5);
+}
+/* 💬 Chat Container */
+.chat-container {
+  display: flex;
+  flex-direction: column;
+  height: 75vh;
+  border-radius: 16px;
+  overflow: hidden;
+}
+
+/* 📜 Messages Area */
+.chat-messages {
+  flex: 1;
+  overflow-y: auto;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+/* 🧍 User Message */
+.chat-user {
+  align-self: flex-end;
+  background: linear-gradient(135deg, var(--accent-purple), var(--accent-cyan));
+  color: white;
+  padding: 10px 14px;
+  border-radius: 14px 14px 0 14px;
+  max-width: 70%;
+}
+
+/* 🤖 AI Message */
+.chat-ai {
+  align-self: flex-start;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid var(--glass-border);
+  padding: 10px 14px;
+  border-radius: 14px 14px 14px 0;
+  max-width: 70%;
+}
+
+/* ⌨️ Input Area */
+.chat-input-container {
+  display: flex;
+  gap: 10px;
+  padding: 12px;
+  border-top: 1px solid var(--glass-border);
+  background: rgba(0, 0, 0, 0.3);
+}
+
+/* ✨ Send Button Glow */
+.btn-send {
+  padding: 10px 16px;
+  border-radius: 10px;
+  background: linear-gradient(135deg, var(--accent-cyan), var(--accent-purple));
+  border: none;
+  color: white;
+  font-weight: 600;
+  cursor: pointer;
+  transition: 0.3s;
+}
+
+.btn-send:hover {
+  box-shadow: 0 0 15px var(--glow-cyan);
+}

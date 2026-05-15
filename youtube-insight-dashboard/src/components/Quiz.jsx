@@ -1,21 +1,24 @@
-import React, { useState } from 'react';
-import './Quiz.css';
+import React, { useState } from "react";
 
-const Quiz = ({ videoId }) => {
+const Quiz = ({ videoData }) => {
+  const videoId = videoData?.videoId || "";
+
   const [quiz, setQuiz] = useState(null);
   const [userAnswers, setUserAnswers] = useState([]);
   const [showResults, setShowResults] = useState(false);
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState('');
+  const [error, setError] = useState("");
   const [numQuestions, setNumQuestions] = useState(5);
 
   const generateQuiz = async () => {
     setLoading(true);
-    setError('');
+    setError("");
     setShowResults(false);
 
     try {
-      const response = await fetch(`http://127.0.0.1:8000/quiz/${videoId}?num_questions=${numQuestions}`);
+      const response = await fetch(
+        `http://127.0.0.1:8000/quiz/${videoId}?num_questions=${numQuestions}`,
+      );
       const data = await response.json();
 
       if (data.error) {
@@ -26,8 +29,8 @@ const Quiz = ({ videoId }) => {
       setQuiz(data.questions);
       setUserAnswers(new Array(data.questions.length).fill(null));
     } catch (err) {
-      console.error('Error generating quiz:', err);
-      setError('Failed to generate quiz. Make sure the backend is running.');
+      console.error("Error generating quiz:", err);
+      setError("Failed to generate quiz. Make sure the backend is running.");
     } finally {
       setLoading(false);
     }
@@ -52,32 +55,38 @@ const Quiz = ({ videoId }) => {
   const calculateScore = () => {
     let correct = 0;
     quiz.forEach((q, idx) => {
-      if (userAnswers[idx] === q.correct) {
-        correct++;
-      }
+      if (userAnswers[idx] === q.correct) correct++;
     });
     return correct;
   };
 
   if (loading) {
     return (
-      <div className="quiz-loading">
-        <span className="spinner"></span>
-        <p>Generating quiz questions...</p>
+      <div className="glass-card pad-lg" style={{ textAlign: "center" }}>
+        <span className="spinner" />
+        <p style={{ marginTop: 12 }}>Generating quiz questions...</p>
       </div>
     );
   }
 
   if (!quiz) {
     return (
-      <div className="quiz-start">
-        <div className="quiz-config">
-          <label htmlFor="num-questions">Number of Questions:</label>
+      <div className="glass-card pad-lg">
+        <div className="card-row" style={{ marginBottom: 16 }}>
+          <div className="chip">Quiz</div>
+          <div className="chip">AI-generated</div>
+        </div>
+
+        <div className="quiz-config" style={{ marginBottom: 16 }}>
+          <label htmlFor="num-questions" className="section-title" style={{ display: "block" }}>
+            Number of Questions
+          </label>
           <select
             id="num-questions"
-            className="input"
+            className="input-field"
             value={numQuestions}
-            onChange={(e) => setNumQuestions(parseInt(e.target.value))}
+            onChange={(e) => setNumQuestions(parseInt(e.target.value, 10))}
+            style={{ maxWidth: 220 }}
           >
             <option value={3}>3 Questions</option>
             <option value={5}>5 Questions</option>
@@ -85,17 +94,20 @@ const Quiz = ({ videoId }) => {
             <option value={10}>10 Questions</option>
           </select>
         </div>
+
         <button className="btn-primary" onClick={generateQuiz}>
           Generate Quiz
         </button>
+
         {error && (
-          <div className="status-box error">
+          <div className="status-box error" style={{ marginTop: 14 }}>
             ⚠️ <span>{error}</span>
           </div>
         )}
-        <div className="quiz-info">
-          <div className="info-icon">📝</div>
-          <p>Test your understanding of the video content with an AI-generated quiz!</p>
+
+        <div className="empty-card" style={{ marginTop: 16 }}>
+          <div className="empty-icon">📝</div>
+          <p>Test your understanding with an AI-generated quiz.</p>
         </div>
       </div>
     );
@@ -107,33 +119,39 @@ const Quiz = ({ videoId }) => {
     const passed = percentage >= 60;
 
     return (
-      <div className="quiz-results">
-        <div className={`score-card ${passed ? 'pass' : 'fail'}`}>
-          <div className="score-icon">{passed ? '🎉' : '📚'}</div>
-          <h3 className="score-title">
-            {passed ? 'Great Job!' : 'Keep Learning!'}
-          </h3>
-          <div className="score-display">
-            <span className="score-value">{score}/{quiz.length}</span>
-            <span className="score-percentage">{percentage}%</span>
+      <div className="glass-card pad-lg">
+        <div className={`quiz-results ${passed ? "pass" : "fail"}`}>
+          <div className="score-card">
+            <div className="score-icon">{passed ? "🎉" : "📚"}</div>
+            <h3 className="score-title">{passed ? "Great Job!" : "Keep Learning!"}</h3>
+            <div className="score-display">
+              <span className="score-value">
+                {score}/{quiz.length}
+              </span>
+              <span className="score-percentage">{percentage}%</span>
+            </div>
           </div>
         </div>
 
-        <div className="quiz-review">
+        <div className="quiz-review" style={{ marginTop: 18 }}>
           {quiz.map((q, idx) => {
             const userAns = userAnswers[idx];
             const isCorrect = userAns === q.correct;
 
             return (
-              <div key={idx} className={`review-card ${isCorrect ? 'correct' : 'wrong'}`}>
-                <div className="review-header">
+              <div key={idx} className={`review-card ${isCorrect ? "correct" : "wrong"}`} style={{ padding: 16 }}>
+                <div className="review-header" style={{ display: "flex", justifyContent: "space-between", gap: 12 }}>
                   <span className="review-number">Question {idx + 1}</span>
-                  <span className={`review-badge ${isCorrect ? 'correct' : 'wrong'}`}>
-                    {isCorrect ? '✓ Correct' : '✗ Wrong'}
+                  <span className={`chip ${isCorrect ? "good" : "warn"}`}>
+                    {isCorrect ? "✓ Correct" : "✗ Wrong"}
                   </span>
                 </div>
-                <div className="review-question">{q.question}</div>
-                <div className="review-answers">
+
+                <div className="review-question" style={{ marginTop: 10 }}>
+                  {q.question}
+                </div>
+
+                <div className="review-answers" style={{ marginTop: 10 }}>
                   {!isCorrect && userAns !== null && (
                     <div className="your-answer wrong">
                       Your answer: {q.options[userAns]}
@@ -143,13 +161,16 @@ const Quiz = ({ videoId }) => {
                     Correct answer: {q.options[q.correct]}
                   </div>
                 </div>
-                <div className="review-explanation">{q.explanation}</div>
+
+                <div className="review-explanation text-secondary" style={{ marginTop: 10 }}>
+                  {q.explanation}
+                </div>
               </div>
             );
           })}
         </div>
 
-        <button className="btn-primary" onClick={resetQuiz}>
+        <button className="btn-primary" onClick={resetQuiz} style={{ marginTop: 16 }}>
           Take Another Quiz
         </button>
       </div>
@@ -157,35 +178,48 @@ const Quiz = ({ videoId }) => {
   }
 
   return (
-    <div className="quiz-questions">
-      {quiz.map((q, qIdx) => (
-        <div key={qIdx} className="quiz-card">
-          <div className="quiz-question-header">
-            <span className="question-number">Question {qIdx + 1}</span>
-            <span className="question-progress">{qIdx + 1}/{quiz.length}</span>
+    <div className="glass-card pad-lg">
+      <div className="card-row" style={{ marginBottom: 16 }}>
+        <div className="chip">Quiz</div>
+        <div className="chip">Question set ready</div>
+      </div>
+
+      <div className="quiz-questions">
+        {quiz.map((q, qIdx) => (
+          <div key={qIdx} className="quiz-card" style={{ padding: 16 }}>
+            <div className="card-row" style={{ justifyContent: "space-between" }}>
+              <span className="chip">Question {qIdx + 1}</span>
+              <span className="chip">
+                {qIdx + 1}/{quiz.length}
+              </span>
+            </div>
+
+            <div className="quiz-question" style={{ marginTop: 12 }}>
+              {q.question}
+            </div>
+
+            <div className="quiz-options" style={{ display: "grid", gap: 10, marginTop: 14 }}>
+              {q.options.map((opt, optIdx) => (
+                <label key={optIdx} className="quiz-option">
+                  <input
+                    type="radio"
+                    name={`q${qIdx}`}
+                    checked={userAnswers[qIdx] === optIdx}
+                    onChange={() => handleAnswerSelect(qIdx, optIdx)}
+                  />
+                  <span className="option-text">{opt}</span>
+                </label>
+              ))}
+            </div>
           </div>
-          <div className="quiz-question">{q.question}</div>
-          <div className="quiz-options">
-            {q.options.map((opt, optIdx) => (
-              <label key={optIdx} className="quiz-option">
-                <input
-                  type="radio"
-                  name={`q${qIdx}`}
-                  checked={userAnswers[qIdx] === optIdx}
-                  onChange={() => handleAnswerSelect(qIdx, optIdx)}
-                />
-                <span className="option-text">{opt}</span>
-                <span className="option-radio"></span>
-              </label>
-            ))}
-          </div>
-        </div>
-      ))}
+        ))}
+      </div>
 
       <button
-        className="btn-primary submit-quiz-btn"
+        className="btn-primary"
         onClick={submitQuiz}
         disabled={userAnswers.some((ans) => ans === null)}
+        style={{ marginTop: 16 }}
       >
         Submit Quiz
       </button>

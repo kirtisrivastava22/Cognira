@@ -1,23 +1,22 @@
-import React, { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
-import './History.css';
+import React, { useState } from "react";
+import { useNavigate } from "react-router-dom";
 
 const History = ({ videoHistory, setCurrentVideo }) => {
   const navigate = useNavigate();
-  const [searchTerm, setSearchTerm] = useState('');
+  const [searchTerm, setSearchTerm] = useState("");
 
   const filteredHistory = videoHistory.filter((video) =>
-    video.title.toLowerCase().includes(searchTerm.toLowerCase())
+    (video.title || "").toLowerCase().includes(searchTerm.toLowerCase()),
   );
 
   const handleVideoClick = (video) => {
     setCurrentVideo(video);
-    navigate('/analyze');
+    navigate("/analyze");
   };
 
   const clearHistory = () => {
-    if (window.confirm('Are you sure you want to clear all history?')) {
-      localStorage.removeItem('videoHistory');
+    if (window.confirm("Are you sure you want to clear all history?")) {
+      localStorage.removeItem("videoHistory");
       window.location.reload();
     }
   };
@@ -39,7 +38,11 @@ const History = ({ videoHistory, setCurrentVideo }) => {
 
     videos.forEach((video) => {
       const videoDate = new Date(video.timestamp);
-      const videoDay = new Date(videoDate.getFullYear(), videoDate.getMonth(), videoDate.getDate());
+      const videoDay = new Date(
+        videoDate.getFullYear(),
+        videoDate.getMonth(),
+        videoDate.getDate(),
+      );
 
       if (videoDay.getTime() === today.getTime()) {
         groups.today.push(video);
@@ -58,21 +61,27 @@ const History = ({ videoHistory, setCurrentVideo }) => {
   const groupedHistory = groupByDate(filteredHistory);
 
   return (
-    <div className="history">
-      <div className="history-header">
-        <h1 className="page-title">Video History</h1>
-        <p className="page-subtitle">
-          View and manage your previously analyzed videos
-        </p>
+    <div className="section-grid">
+      <div className="glass-card pad-lg">
+        <div className="history-header">
+          <div>
+            <h1 className="hero-title" style={{ fontSize: "2.2rem" }}>
+              Your sessions
+            </h1>
+            <p className="hero-subtitle" style={{ marginTop: 8 }}>
+              Search and revisit your analyzed videos, audio, and uploads.
+            </p>
+          </div>
+        </div>
       </div>
 
-      <div className="history-controls card">
+      <div className="history-controls glass-card pad-lg">
         <div className="search-bar">
           <span className="search-icon">🔍</span>
           <input
             type="text"
-            className="input search-input"
-            placeholder="Search videos..."
+            className="input-field search-input"
+            placeholder="Search sessions..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
           />
@@ -85,80 +94,36 @@ const History = ({ videoHistory, setCurrentVideo }) => {
       </div>
 
       {videoHistory.length === 0 ? (
-        <div className="empty-history card">
-          <div className="empty-icon">📚</div>
-          <h3>No History Yet</h3>
-          <p>Videos you analyze will appear here</p>
-          <button className="btn-primary" onClick={() => navigate('/analyze')}>
-            Analyze Your First Video
+        <div className="empty-history glass-card pad-lg">
+          
+          <h3>No history yet</h3>
+          <p>Sessions you analyze will appear here.</p>
+          <button className="btn-primary" onClick={() => navigate("/analyze")}>
+            Analyze your first session
           </button>
         </div>
       ) : filteredHistory.length === 0 ? (
-        <div className="empty-history card">
-          <div className="empty-icon">🔍</div>
-          <h3>No Results Found</h3>
-          <p>Try a different search term</p>
+        <div className="empty-history glass-card pad-lg">
+          
+          <h3>No results found</h3>
+          <p>Try a different search term.</p>
         </div>
       ) : (
         <div className="history-content">
           {groupedHistory.today.length > 0 && (
-            <div className="history-section">
-              <h2 className="section-heading">Today</h2>
-              <div className="video-grid">
-                {groupedHistory.today.map((video) => (
-                  <VideoCard
-                    key={video.videoId + video.timestamp}
-                    video={video}
-                    onClick={() => handleVideoClick(video)}
-                  />
-                ))}
-              </div>
-            </div>
+            <Section title="Today" videos={groupedHistory.today} onClick={handleVideoClick} />
           )}
 
           {groupedHistory.yesterday.length > 0 && (
-            <div className="history-section">
-              <h2 className="section-heading">Yesterday</h2>
-              <div className="video-grid">
-                {groupedHistory.yesterday.map((video) => (
-                  <VideoCard
-                    key={video.videoId + video.timestamp}
-                    video={video}
-                    onClick={() => handleVideoClick(video)}
-                  />
-                ))}
-              </div>
-            </div>
+            <Section title="Yesterday" videos={groupedHistory.yesterday} onClick={handleVideoClick} />
           )}
 
           {groupedHistory.thisWeek.length > 0 && (
-            <div className="history-section">
-              <h2 className="section-heading">This Week</h2>
-              <div className="video-grid">
-                {groupedHistory.thisWeek.map((video) => (
-                  <VideoCard
-                    key={video.videoId + video.timestamp}
-                    video={video}
-                    onClick={() => handleVideoClick(video)}
-                  />
-                ))}
-              </div>
-            </div>
+            <Section title="This Week" videos={groupedHistory.thisWeek} onClick={handleVideoClick} />
           )}
 
           {groupedHistory.older.length > 0 && (
-            <div className="history-section">
-              <h2 className="section-heading">Older</h2>
-              <div className="video-grid">
-                {groupedHistory.older.map((video) => (
-                  <VideoCard
-                    key={video.videoId + video.timestamp}
-                    video={video}
-                    onClick={() => handleVideoClick(video)}
-                  />
-                ))}
-              </div>
-            </div>
+            <Section title="Older" videos={groupedHistory.older} onClick={handleVideoClick} />
           )}
         </div>
       )}
@@ -166,23 +131,56 @@ const History = ({ videoHistory, setCurrentVideo }) => {
   );
 };
 
+const Section = ({ title, videos, onClick }) => {
+  return (
+    <div className="glass-card pad-lg">
+      <h2 className="section-title">{title}</h2>
+      <div className="history-grid">
+        {videos.map((video) => (
+          <VideoCard
+            key={video.videoId + video.timestamp}
+            video={video}
+            onClick={() => onClick(video)}
+          />
+        ))}
+      </div>
+    </div>
+  );
+};
+
 const VideoCard = ({ video, onClick }) => {
+  const isYoutube = video.sourceType === "youtube" || !video.sourceType;
+
   return (
     <div className="history-video-card" onClick={onClick}>
       <div className="video-thumbnail">
-        <img
-          src={`https://img.youtube.com/vi/${video.videoId}/mqdefault.jpg`}
-          alt={video.title}
-        />
+        {isYoutube ? (
+          <img
+            src={`https://img.youtube.com/vi/${video.videoId}/mqdefault.jpg`}
+            alt={video.title}
+          />
+        ) : (
+          <div
+            style={{
+              width: "100%",
+              height: "100%",
+              display: "grid",
+              placeItems: "center",
+              background:
+                "linear-gradient(135deg, rgba(139,92,246,0.25), rgba(34,211,238,0.16))",
+              fontSize: 42,
+            }}
+          >
+            {video.sourceType === "upload" ? "📁" : "🎧"}
+          </div>
+        )}
         <div className="video-overlay">
-          <span className="play-icon">▶️</span>
+          <span className="play-icon">▶</span>
         </div>
       </div>
       <div className="video-info">
         <h3 className="video-title">{video.title}</h3>
-        <p className="video-date">
-          {new Date(video.timestamp).toLocaleString()}
-        </p>
+        <p className="video-date">{new Date(video.timestamp).toLocaleString()}</p>
       </div>
     </div>
   );
