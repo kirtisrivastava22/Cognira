@@ -63,7 +63,6 @@ const Quiz = ({ videoData }) => {
   if (loading) {
     return (
       <div className="glass-card pad-lg" style={{ textAlign: "center" }}>
-        <span className="spinner" />
         <p style={{ marginTop: 12 }}>Generating quiz questions...</p>
       </div>
     );
@@ -122,12 +121,13 @@ const Quiz = ({ videoData }) => {
       <div className="glass-card pad-lg">
         <div className={`quiz-results ${passed ? "pass" : "fail"}`}>
           <div className="score-card">
-            <div className="score-icon">{passed ? "🎉" : "📚"}</div>
+            <div className="score-icon">{passed ? "🎉" : "😶‍🌫️"}</div>
             <h3 className="score-title">{passed ? "Great Job!" : "Keep Learning!"}</h3>
             <div className="score-display">
               <span className="score-value">
                 {score}/{quiz.length}
               </span>
+              <br />
               <span className="score-percentage">{percentage}%</span>
             </div>
           </div>

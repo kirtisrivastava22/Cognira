@@ -26,5 +26,30 @@
     "source_url": null,
     "local_path": "media\\a85b991382ac\\All Falls Down.mp3",
     "title": "All Falls Down.mp3"
+  },
+  "404ba51cf0c7": {
+    "media_id": "404ba51cf0c7",
+    "source_type": "docx",
+    "source_url": null,
+    "local_path": "media\\404ba51cf0c7\\Task 3 Software Development Proposal Template.docx",
+    "title": "Task 3 Software Development Proposal Template.docx",
+    "word_count": 79,
+    "truncated": false
+  },
+  "0a4724f7dfed": {
+    "media_id": "0a4724f7dfed",
+    "source_type": "docx",
+    "source_url": null,
+    "local_path": "media\\0a4724f7dfed\\AWS INTRODUCTION TO GENAI.docx",
+    "title": "AWS INTRODUCTION TO GENAI.docx",
+    "word_count": 1595,
+    "truncated": false
+  },
+  "bf50964600ff": {
+    "media_id": "bf50964600ff",
+    "source_type": "upload",
+    "source_url": null,
+    "local_path": "media\\bf50964600ff\\RoadEye-LPR_demo_video.mp4",
+    "title": "RoadEye-LPR_demo_video.mp4"
   }
 }

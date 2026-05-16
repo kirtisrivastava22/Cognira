@@ -1,31 +1,32 @@
 """
 export.py
 ---------
-Generates a professionally designed DOCX study-notes document from a
-YouTube video transcript.
+Generates a professionally designed DOCX study-notes document.
 
-Architecture:
-  Python (FastAPI) ─► gathers content via RAG ─► writes a JSON payload
-  ─► spawns a Node.js script that builds the .docx with the `docx` npm library
-  ─► returns the file to the client.
+Supports:
+  • YouTube videos  — RAG over YouTube transcript
+  • Uploaded DOCX   — RAG over parsed document text (no transcript needed)
+  • Audio / video   — RAG over Whisper transcript
 
-Why Node for the docx?  The `python-docx` library cannot produce the
-design-quality output we need (accent bars, shaded table cells, coloured
-numbered rows, proper footers with page numbers).  The `docx` npm package
-handles all of that reliably.
+Rate-limited via Depends(rate_limit("export")).
 """
 
-from fastapi import APIRouter, HTTPException
-from fastapi.responses import FileResponse
-from pathlib import Path
-import subprocess
-import tempfile
+from __future__ import annotations
+
 import json
+import logging
 import os
 import re
-import requests
+import subprocess
+import tempfile
 from datetime import datetime
+from pathlib import Path
 
+import requests
+from fastapi import APIRouter, Depends, HTTPException
+from fastapi.responses import FileResponse
+
+from app.rate_limiter import rate_limit
 from app.rag import (
     ask_youtube_video,
     load_youtube_docs,
@@ -35,15 +36,18 @@ from app.rag import (
     get_or_create_vectorstore,
     format_docs_with_timestamps,
 )
+from app.media_manager import get_media_meta
+from app.docx_reader import load_docx_docs
+
+log = logging.getLogger("export")
 
 router = APIRouter()
 
-# Path to the Node.js generator script (lives next to this file in app/)
 _GENERATOR_SCRIPT = Path(__file__).parent / "docx_generator.js"
 
 
 # ──────────────────────────────────────────────────────────────────────────
-# Video metadata
+# Metadata helpers
 # ──────────────────────────────────────────────────────────────────────────
 
 def get_video_metadata(video_id: str) -> dict:
@@ -56,61 +60,65 @@ def get_video_metadata(video_id: str) -> dict:
         res.raise_for_status()
         data = res.json()
         return {
-            "title": data.get("title", f"YouTube Video ({video_id})"),
+            "title":   data.get("title", f"YouTube Video ({video_id})"),
             "channel": data.get("author_name", "Unknown Channel"),
         }
     except Exception:
         return {"title": f"YouTube Video ({video_id})", "channel": "Unknown Channel"}
 
 
+def _media_metadata(media_id: str) -> dict:
+    """Return title / channel for any media type."""
+    meta = get_media_meta(media_id)
+    if meta:
+        title = meta.get("title") or media_id
+        source_type = meta.get("source_type", "")
+        if source_type == "youtube":
+            return get_video_metadata(media_id)
+        return {"title": title, "channel": source_type.capitalize() + " upload"}
+    # Fallback — try YouTube
+    return get_video_metadata(media_id)
+
+
 # ──────────────────────────────────────────────────────────────────────────
-# Content generation helpers
+# Content generation
 # ──────────────────────────────────────────────────────────────────────────
 
 _NOTE_QUESTIONS = [
     ("Key Concepts",
-     "List the 3-5 most important concepts or definitions introduced in this video. "
+     "List the 3-5 most important concepts or definitions introduced in this content. "
      "Use bullet points. Each bullet: one clear sentence. No timestamps."),
-
     ("Main Points & Explanations",
-     "What are the main points or arguments made in this video? "
+     "What are the main points or arguments made in this content? "
      "List them as concise bullet points (one idea per bullet)."),
-
     ("Examples & Case Studies",
-     "What specific examples, analogies, or case studies does the speaker use? "
+     "What specific examples, analogies, or case studies does the author use? "
      "List each as a short bullet. If none, reply: None mentioned."),
-
     ("Comparisons & Trade-offs",
-     "Does the video compare two or more approaches, tools, or ideas? "
+     "Does the content compare two or more approaches, tools, or ideas? "
      "List the key differences as bullet points. If none, reply: None mentioned."),
-
     ("Conclusions & Recommendations",
-     "What conclusions or recommendations does the speaker give? "
-     "List as bullet points."),
+     "What conclusions or recommendations are given? List as bullet points."),
 ]
 
-_SUMMARY_QUESTION = (
-    "Write a 2-3 sentence executive summary of this video. "
-    "What is it about, and what is the main insight a viewer should take away?"
+_SUMMARY_Q  = (
+    "Write a 2-3 sentence executive summary. "
+    "What is it about, and what is the main insight a reader should take away?"
+)
+_TAKEAWAY_Q = (
+    "List exactly 3 key takeaways — the 3 things a student must remember. "
+    "Each: one sentence, no timestamps."
 )
 
-_TAKEAWAY_QUESTION = (
-    "List exactly 3 key takeaways from this video — the 3 things a student must "
-    "remember after watching. Each takeaway: one sentence, no timestamps."
-)
 
-
-def _ask(video_id: str, question: str) -> str:
-    """Ask a question and return just the answer text, stripping timestamps."""
-    result = ask_youtube_video(video_id, question)
+def _ask(media_id: str, question: str) -> str:
+    result = ask_youtube_video(media_id, question)
     answer = result.get("answer", "")
-    # Strip inline timestamp citations like [04:55] for prose sections
     answer = re.sub(r'\[\d{2}:\d{2}\]', '', answer).strip()
     return answer if answer and "i don't know" not in answer.lower() else ""
 
 
 def _parse_bullets(text: str) -> list[str]:
-    """Turn a freeform LLM bullet response into a clean list of strings."""
     if not text:
         return []
     bullets = []
@@ -118,13 +126,18 @@ def _parse_bullets(text: str) -> list[str]:
         line = re.sub(r'^[\s\-\*•\d\.]+', '', line).strip()
         if len(line) > 8:
             bullets.append(line)
-    return bullets[:8]  # cap at 8 bullets per section
+    return bullets[:8]
 
 
-def _get_top_timestamps(video_id: str, n: int = 6) -> list[dict]:
-    """Pull the most information-dense timestamps from the cached vectorstore."""
+def _get_top_timestamps(media_id: str, n: int = 6) -> list[dict]:
+    """Pull top timestamps — returns empty list for DOCX (no time axis)."""
+    meta = get_media_meta(media_id)
+    if meta and meta.get("source_type") == "docx":
+        return []
+
+    from app.rag import get_or_create_vectorstore, hybrid_retrieve, rerank_docs_by_timestamp_density
     db = get_or_create_vectorstore(
-        video_id,
+        media_id,
         docs_builder=lambda vid: split_documents(load_youtube_docs(vid))
     )
     if db is None:
@@ -141,7 +154,6 @@ def _get_top_timestamps(video_id: str, n: int = 6) -> list[dict]:
             continue
         seen.add(ts)
         mm, ss = divmod(ts, 60)
-        # Use the first ~60 chars of the chunk as a topic label
         label = doc.page_content[:60].strip().rstrip(",.")
         timestamps.append({"seconds": ts, "display": f"{mm:02d}:{ss:02d}", "label": label})
         if len(timestamps) >= n:
@@ -151,91 +163,66 @@ def _get_top_timestamps(video_id: str, n: int = 6) -> list[dict]:
 
 
 # ──────────────────────────────────────────────────────────────────────────
-# PDF export (legacy, kept for backwards compatibility)
+# DOCX export endpoint
 # ──────────────────────────────────────────────────────────────────────────
 
-# @router.post("/export/pdf")
-# def export_pdf(video_id: str):
-#     """
-#     Kept for backwards compatibility.  Redirects to the DOCX export.
-#     """
-#     return export_docx(video_id)
-
-
-# ──────────────────────────────────────────────────────────────────────────
-# DOCX export (new, primary)
-# ──────────────────────────────────────────────────────────────────────────
-
-@router.post("/export/docx")
+@router.post("/export/docx", dependencies=[Depends(rate_limit("export"))])
 def export_docx(video_id: str):
     """
-    Generate a professionally designed DOCX study-notes document.
-
-    Flow:
-      1.  Fetch video metadata (title, channel).
-      2.  Run focused RAG queries to extract summary, sections, takeaways.
-      3.  Pull representative timestamps.
-      4.  Serialise everything to JSON and pass to the Node.js docx generator.
-      5.  Return the .docx file.
+    Generate a study-notes DOCX for any ingested media (YouTube, upload, DOCX).
     """
-    # ── 1. Metadata ───────────────────────────────────────────────────────
-    meta = get_video_metadata(video_id)
+    # ── Metadata ──────────────────────────────────────────────────────────────
+    meta_info = _media_metadata(video_id)
+    source_url = f"https://www.youtube.com/watch?v={video_id}"
+    media_meta = get_media_meta(video_id)
+    if media_meta and media_meta.get("source_type") != "youtube":
+        source_url = media_meta.get("source_url") or media_meta.get("title") or video_id
 
-    # ── 2. Content via RAG ────────────────────────────────────────────────
-    summary_raw = _ask(video_id, _SUMMARY_QUESTION)
-    summary = summary_raw or "Summary not available."
+    # ── Content ───────────────────────────────────────────────────────────────
+    summary  = _ask(video_id, _SUMMARY_Q) or "Summary not available."
 
     sections = []
     for heading, question in _NOTE_QUESTIONS:
-        raw = _ask(video_id, question)
+        raw     = _ask(video_id, question)
         bullets = _parse_bullets(raw)
         if bullets and bullets != ["None mentioned"]:
             sections.append({"heading": heading, "bullets": bullets})
 
-    takeaways_raw = _ask(video_id, _TAKEAWAY_QUESTION)
-    takeaways = _parse_bullets(takeaways_raw) or ["See the video for key insights."]
-
-    # ── 3. Timestamps ─────────────────────────────────────────────────────
+    takeaways = _parse_bullets(_ask(video_id, _TAKEAWAY_Q)) or ["See the content for key insights."]
     timestamps = _get_top_timestamps(video_id, n=6)
 
-    # ── 4. Build payload ──────────────────────────────────────────────────
+    # ── Payload ───────────────────────────────────────────────────────────────
     payload = {
-        "video_title": meta["title"],
-        "channel_name": meta["channel"],
-        "video_url": f"https://www.youtube.com/watch?v={video_id}",
+        "video_title":  meta_info["title"],
+        "channel_name": meta_info["channel"],
+        "video_url":    source_url,
         "generated_at": datetime.now().strftime("%Y-%m-%d %H:%M"),
-        "summary": summary,
-        "sections": sections,
+        "summary":      summary,
+        "sections":     sections,
         "key_takeaways": takeaways[:4],
-        "timestamps": timestamps,
+        "timestamps":   timestamps,
     }
 
-    # ── 5. Generate DOCX via Node.js ─────────────────────────────────────
+    # ── Node.js generator ─────────────────────────────────────────────────────
     export_dir = Path("exports")
     export_dir.mkdir(exist_ok=True)
     out_path = export_dir / f"{video_id}_notes.docx"
 
-    # Write payload to a temp file so Node can read it
-    with tempfile.NamedTemporaryFile(
-        mode="w", suffix=".json", delete=False, encoding="utf-8"
-    ) as tmp:
+    with tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False, encoding="utf-8") as tmp:
         json.dump(payload, tmp, ensure_ascii=False)
         tmp_path = tmp.name
 
     try:
         result = subprocess.run(
             ["node", str(_GENERATOR_SCRIPT), tmp_path, str(out_path)],
-            capture_output=True,
-            text=True,
-            timeout=30,
+            capture_output=True, text=True, timeout=30,
         )
         if result.returncode != 0:
-            # print("STDOUT:", result.stdout)
-            # print("STDERR:", result.stderr)
             raise RuntimeError(result.stderr or result.stdout)
     except subprocess.TimeoutExpired:
         raise HTTPException(status_code=504, detail="Document generation timed out.")
     except Exception as exc:
+        log.exception("DOCX generation failed")
         raise HTTPException(status_code=500, detail=f"DOCX generation failed: {exc}")
     finally:
         os.unlink(tmp_path)
@@ -243,8 +230,8 @@ def export_docx(video_id: str):
     if not out_path.exists():
         raise HTTPException(status_code=500, detail="DOCX file was not created.")
 
-    safe_title = re.sub(r'[^\w\s-]', '', meta["title"])[:60].strip()
-    filename = f"{safe_title} — Study Notes.docx" if safe_title else "Study Notes.docx"
+    safe_title = re.sub(r'[^\w\s-]', '', meta_info["title"])[:60].strip()
+    filename   = f"{safe_title} — Study Notes.docx" if safe_title else "Study Notes.docx"
 
     return FileResponse(
         str(out_path),
