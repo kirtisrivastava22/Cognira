@@ -16,25 +16,32 @@ import "./AskQuestion.css";
 
 const API = "http://127.0.0.1:8000";
 
-/* Regex patterns */
-const TS_RE   = /\[(\d{2}):(\d{2})\]/g;          // [04:55]
+const TS_RE = /\[(\d{1,2}):(\d{2})\]/g;
+const FLEX_TS_RE = /(\d{1,2}):(\d{2})/g;
 const PARA_RE = /\[para(?:graph)?\s*(\d+)\]/gi;   // [para 3] or [paragraph 3]
 
 function renderAnswer(raw, sourceType) {
-  // Replace timestamp refs
-  let html = raw.replace(TS_RE, (match, mm, ss) => {
+  let html = raw;
+
+  // strict [MM:SS]
+  html = html.replace(TS_RE, (match, mm, ss) => {
     const sec = parseInt(mm, 10) * 60 + parseInt(ss, 10);
-    return `<button class="ref-ts" data-time="${sec}" title="Jump to ${match}">${match}</button>`;
+    return `<button class="ref-ts" data-time="${sec}">[${mm}:${ss}]</button>`;
   });
 
-  // Replace para refs (DOCX)
+  // fallback (MM:SS without brackets)
+  html = html.replace(FLEX_TS_RE, (match, mm, ss) => {
+    const sec = parseInt(mm, 10) * 60 + parseInt(ss, 10);
+    return `<button class="ref-ts" data-time="${sec}">[${mm}:${ss}]</button>`;
+  });
+
+  // paragraphs
   html = html.replace(PARA_RE, (match, n) => {
-    return `<button class="ref-para" data-para="${n}" title="Go to paragraph ${n}">${match}</button>`;
+    return `<button class="ref-para" data-para="${n}">[paragraph ${n}]</button>`;
   });
 
   return html;
 }
-
 /* ─────────────────────────────────────────────────────────────────────────── */
 
 const AskQuestion = ({ videoData }) => {
@@ -47,6 +54,9 @@ const AskQuestion = ({ videoData }) => {
   const [isLoading, setIsLoading] = useState(false);
   const [error,    setError]    = useState("");
   const answerRef  = useRef(null);
+
+  const [chat, setChat] = useState([]);
+const [currentAnswer, setCurrentAnswer] = useState("");
 
   useEffect(() => {
     if (answerRef.current)
@@ -64,7 +74,11 @@ const AskQuestion = ({ videoData }) => {
       const res = await fetch(`${API}/ask_stream`, {
         method:  "POST",
         headers: { "Content-Type": "application/json" },
-        body:    JSON.stringify({ video_id: videoId, question }),
+        body: JSON.stringify({
+  video_id: videoId,
+  question,
+  history: chat,
+}),
       });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
 
@@ -92,14 +106,22 @@ const AskQuestion = ({ videoData }) => {
               break;
             case "token":
               rawAnswer += payload.value;
-              setAnswerHtml(renderAnswer(rawAnswer, sourceType));
+              setCurrentAnswer(rawAnswer);
               break;
             case "correction":
               rawAnswer = payload.value;
-              setAnswerHtml(renderAnswer(rawAnswer, sourceType));
+              setCurrentAnswer(rawAnswer);
               break;
             case "end":
-              setStatus(""); setIsLoading(false);
+              setChat(prev => [
+                ...prev,
+                { question, answer: rawAnswer }
+              ]);
+
+              setCurrentAnswer("");
+              setQuestion("");
+              setStatus("");
+              setIsLoading(false);
               break;
             default:
               break;
@@ -118,8 +140,12 @@ const AskQuestion = ({ videoData }) => {
     if (e.target.classList.contains("ref-ts")) {
       const sec = parseInt(e.target.dataset.time, 10);
       if (sourceType === "youtube") {
-        window.open(`https://www.youtube.com/watch?v=${videoId}&t=${sec}s`, "_blank");
-      } else {
+  window.dispatchEvent(
+    new CustomEvent("knowitfast:timestamp", {
+      detail: { seconds: sec, videoId },
+    })
+  );
+}else {
         window.dispatchEvent(
           new CustomEvent("knowitfast:timestamp", { detail: { seconds: sec, videoId } })
         );
@@ -224,22 +250,35 @@ const AskQuestion = ({ videoData }) => {
       )}
 
       {/* Answer */}
-      {answerHtml && (
-        <div className="answer-box" style={{ marginTop: 16 }}>
-          <div className="answer-header">
-            <span className="section-title" style={{ margin: 0 }}>Answer</span>
-            <span style={{ fontSize: 12, color: "rgba(255,255,255,0.4)" }}>
-              Click {refLabel} to jump
-            </span>
-          </div>
-          <div
-            ref={answerRef}
-            className="answer-content"
-            dangerouslySetInnerHTML={{ __html: answerHtml }}
-            onClick={handleAnswerClick}
-          />
-        </div>
-      )}
+      <div style={{ marginTop: 16 }}>
+  {chat.map((item, idx) => (
+    <div key={idx} className="answer-box" style={{ marginBottom: 12 }}>
+      <div style={{ fontWeight: 600, marginBottom: 6 }}>
+        Q: {item.question}
+      </div>
+      <div
+        className="answer-content"
+        dangerouslySetInnerHTML={{
+          __html: renderAnswer(item.answer, sourceType),
+        }}
+        onClick={handleAnswerClick}
+      />
+    </div>
+  ))}
+
+  {currentAnswer && (
+    <div className="answer-box">
+      <div style={{ fontWeight: 600 }}>Answer</div>
+      <div
+        className="answer-content"
+        dangerouslySetInnerHTML={{
+          __html: renderAnswer(currentAnswer, sourceType),
+        }}
+        onClick={handleAnswerClick}
+      />
+    </div>
+  )}
+</div>
 
       {/* Inline styles for ref buttons */}
       <style>{`

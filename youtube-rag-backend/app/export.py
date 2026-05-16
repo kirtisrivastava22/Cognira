@@ -34,7 +34,7 @@ from app.rag import (
     hybrid_retrieve,
     rerank_docs_by_timestamp_density,
     get_or_create_vectorstore,
-    format_docs_with_timestamps,
+    format_docs_with_references,
 )
 from app.media_manager import get_media_meta
 from app.docx_reader import load_docx_docs

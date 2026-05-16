@@ -120,7 +120,12 @@ def load_docx_docs(
 
         docs.append(Document(
             page_content=text,
-            metadata={"start": i * 10, "source": "docx", "paragraph": i},
+            metadata={
+                "start": i * 10,
+                "source": "docx",
+                "paragraph": i,
+                "page": i // 5   # approx (tune this)
+            },
         ))
         total_words += wc
 

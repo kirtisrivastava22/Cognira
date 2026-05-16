@@ -41,7 +41,7 @@ from app.rag import (
     hybrid_retrieve,
     rerank_docs_by_timestamp_density,
     split_documents,
-    format_docs_with_timestamps,
+    format_docs_with_references,
     load_youtube_docs,
     _looks_like_hallucination,
 )
@@ -143,11 +143,11 @@ def health():
 # ─────────────────────────────────────────────────────────────────────────────
 # Request models
 # ─────────────────────────────────────────────────────────────────────────────
-
 class AskRequest(BaseModel):
     video_id: str
     question: str
-
+    history: list[dict] = []   
+    
     @field_validator("video_id")
     @classmethod
     def _clean_id(cls, v: str) -> str:
@@ -217,12 +217,12 @@ ABSOLUTE RULES:
 5. Keep your answer to 2–5 sentences.
 6. Do not repeat the question or explain what you cannot do."""
 
-_STREAM_USER = """Excerpts (each line starts with its reference):
+_STREAM_USER = """Conversation history (if any):
 {context}
 
 Question: {question}
 
-Answer using ONLY the excerpts above (with inline references), or reply "I don't know":"""
+Answer using ONLY the excerpts and history above (with inline references), or reply "I don't know":"""
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -256,13 +256,28 @@ async def ask_stream(req: AskRequest):
             yield "data: " + json.dumps({"type": "answer", "value": "I don't know."}) + "\n\n"
             yield "data: " + json.dumps({"type": "end"}) + "\n\n"
             return
+        
+        history = req.history
+        history_text = ""
 
-        context = format_docs_with_timestamps(docs)
+        for h in history[-5:]:
+            history_text += f"Q: {h['question']}\nA: {h['answer']}\n\n"
+        context = format_docs_with_references(docs)
         prompt  = ChatPromptTemplate.from_messages([("system", _STREAM_SYSTEM), ("user", _STREAM_USER)])
         chain   = prompt | _get_streaming_llm() | StrOutputParser()
 
         answer_text = ""
-        for token in chain.stream({"context": context, "question": req.question}):
+        history_text = ""
+
+        for h in history[-5:]:
+                history_text += f"Q: {h['question']}\nA: {h['answer']}\n\n"
+
+        full_context = history_text + "\n" + context
+
+        for token in chain.stream({
+            "context": full_context,
+            "question": req.question
+        }):
             answer_text += token
             yield "data: " + json.dumps({"type": "token", "value": token}) + "\n\n"
 
@@ -334,6 +349,7 @@ async def ingest_media(
         if _is_docx(filename, content_type):
             try:
                 docs, docx_meta = load_docx_docs(local_path, truncate=True)
+                full_text = "\n\n".join([doc.page_content for doc in docs])
             except WordLimitExceeded as e:
                 raise HTTPException(status_code=422, detail=str(e))
             except Exception as e:
@@ -358,9 +374,14 @@ async def ingest_media(
                 filename, word_count, truncated, docx_meta["paragraph_count"],
             )
             meta = {
-                "media_id": media_id, "source_type": "docx",
-                "source_url": None,  "local_path": local_path,
-                "title": filename,   "word_count": word_count, "truncated": truncated,
+                "media_id": media_id,
+                "source_type": "docx",
+                "source_url": None,
+                "local_path": local_path,
+                "title": filename,
+                "word_count": word_count,
+                "truncated": truncated,
+                "full_text": full_text,  
             }
 
         # Audio/video branch
@@ -375,7 +396,32 @@ async def ingest_media(
         media_id=media_id, source_type=meta["source_type"],
         title=meta["title"], word_count=word_count, truncated=truncated,
     )
+    
+    
+@app.get("/doc/{media_id}")
+def get_doc(media_id: str):
+    meta = get_media_meta(media_id)
 
+    if not meta:
+        raise HTTPException(status_code=404, detail="Media not found.")
+
+    # If already cached
+    if "full_text" in meta:
+        return {"text": meta["full_text"]}
+
+    if meta.get("source_type") == "docx":
+        try:
+            docs, _ = load_docx_docs(meta.get("local_path", ""))
+            full_text = "\n\n".join([doc.page_content for doc in docs])
+
+            # cache it for next time
+            meta["full_text"] = full_text
+
+            return {"text": full_text}
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"Failed to load document: {e}")
+
+    raise HTTPException(status_code=400, detail="Not a document")
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Routes — Chapters

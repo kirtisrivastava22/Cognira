@@ -31,10 +31,6 @@ const Chapters = ({ videoData }) => {
   };
 
   const handleChapterClick = (startTime) => {
-    if (sourceType === "youtube") {
-      window.open(`https://www.youtube.com/watch?v=${videoId}&t=${startTime}s`, "_blank");
-      return;
-    }
 
     window.dispatchEvent(
       new CustomEvent("knowitfast:timestamp", {
@@ -55,7 +51,6 @@ const Chapters = ({ videoData }) => {
       <button className="btn-primary load-chapters-btn" onClick={loadChapters} disabled={loading}>
         {loading ? (
           <>
-            <span className="spinner" style={{ marginRight: 8 }} />
             Loading Chapters...
           </>
         ) : (
@@ -65,7 +60,7 @@ const Chapters = ({ videoData }) => {
 
       {error && (
         <div className="status-box error" style={{ marginTop: 14 }}>
-          ⚠️ <span>{error}</span>
+           <span>{error}</span>
         </div>
       )}
 
@@ -95,7 +90,6 @@ const Chapters = ({ videoData }) => {
 
       {!loading && chapters.length === 0 && !error && (
         <div className="empty-card" style={{ marginTop: 16 }}>
-          <div className="empty-icon">📑</div>
           <p>No chapters loaded yet. Click the button above.</p>
         </div>
       )}

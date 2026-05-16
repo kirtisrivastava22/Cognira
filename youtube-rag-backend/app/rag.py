@@ -189,12 +189,21 @@ def rerank_docs_by_timestamp_density(docs):
 # FORMAT DOCS FOR PROMPT
 # =========================
 
-def format_docs_with_timestamps(docs):
+def format_docs_with_references(docs):
     formatted = []
+
     for doc in docs:
-        ts = doc.metadata.get("start", 0)
-        mm, ss = divmod(int(ts), 60)
-        formatted.append(f"[{mm:02d}:{ss:02d}] {doc.page_content}")
+        source = doc.metadata.get("source", "video")
+
+        if source == "docx":
+            page = doc.metadata.get("page", 0)
+            para = doc.metadata.get("paragraph", 0)
+            formatted.append(f"[page {page}, paragraph {para}] {doc.page_content}")
+        else:
+            ts = doc.metadata.get("start", 0)
+            mm, ss = divmod(int(ts), 60)
+            formatted.append(f"[{mm:02d}:{ss:02d}] {doc.page_content}")
+
     return "\n\n".join(formatted)
 
 
@@ -224,7 +233,7 @@ Answer (cite inline timestamps or reply "I don't know"):"""
 
 def build_rag_chain(llm, retriever):
     parallel = RunnableParallel({
-        "context": retriever | RunnableLambda(format_docs_with_timestamps),
+        "context": retriever | RunnableLambda(format_docs_with_references),
         "question": RunnablePassthrough()
     })
     return parallel | _STRICT_PROMPT | llm | StrOutputParser()
