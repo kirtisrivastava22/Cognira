@@ -12,12 +12,15 @@ New in this version:
   • Request size limit   (50 MB hard cap via middleware)
   • /health endpoint     (for load-balancer / uptime probes)
   • Input validation     (Pydantic validators on AskRequest)
+  • Upload caching fix   (_build_docs skips Whisper when vectorstore exists)
+  • Timestamp format fix  (prompt strictly enforces [MM:SS] / [para N])
 """
 
 from __future__ import annotations
 
 import json
 import logging
+import os
 import re
 import time
 from contextlib import asynccontextmanager
@@ -99,7 +102,7 @@ async def lifespan(app: FastAPI):
 # App
 # ─────────────────────────────────────────────────────────────────────────────
 
-app = FastAPI(title="Video Insight API", version="2.0.0", lifespan=lifespan)
+app = FastAPI(title="Video Insight API", version="2.1.0", lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,
@@ -143,11 +146,12 @@ def health():
 # ─────────────────────────────────────────────────────────────────────────────
 # Request models
 # ─────────────────────────────────────────────────────────────────────────────
+
 class AskRequest(BaseModel):
     video_id: str
     question: str
-    history: list[dict] = []   
-    
+    history: list[dict] = []
+
     @field_validator("video_id")
     @classmethod
     def _clean_id(cls, v: str) -> str:
@@ -185,16 +189,44 @@ def _get_streaming_llm() -> ChatGroq:
     return ChatGroq(model="llama-3.1-8b-instant", temperature=0, max_tokens=400, streaming=True)
 
 
+def _vectorstore_exists_on_disk(media_id: str) -> bool:
+    """Return True when a FAISS vectorstore has already been saved for media_id."""
+    vs_path = Path("vectorstores") / media_id
+    # FAISS saves index.faiss + index.pkl
+    return (vs_path / "index.faiss").exists() and (vs_path / "index.pkl").exists()
+
+
 def _build_docs(media_id: str):
-    """Universal docs builder: DOCX → Whisper → YouTube."""
+    """
+    Universal docs builder: DOCX → uploaded media (Whisper) → YouTube.
+
+    FIX (Problem 2 — upload latency):
+    Before doing any heavy work (Whisper transcription), check whether a
+    vectorstore already exists on disk for this media_id.  If it does,
+    return an empty list — get_or_create_vectorstore will load it from
+    disk without needing the original docs.
+
+    This means Whisper runs exactly ONCE per uploaded file (on the first
+    /ask call), after which the vectorstore disk cache handles everything.
+    The transcript JSON cache (cache/transcripts/{id}.json) provides an
+    additional safety net: if the vectorstore is missing but the transcript
+    cache exists, Whisper is still skipped.
+    """
+    # Short-circuit: vectorstore already on disk — no docs needed
+    if _vectorstore_exists_on_disk(media_id):
+        return []   # get_or_create_vectorstore loads from disk, ignores this
+
     meta = get_media_meta(media_id)
     if meta:
         if meta.get("source_type") == "docx":
             docs, _ = load_docx_docs(meta.get("local_path", ""))
             return split_documents(docs)
+        # Uploaded audio/video — load_media_docs checks transcript cache first
         docs = load_media_docs(media_id)
         if docs:
             return split_documents(docs)
+
+    # Fallback: treat as YouTube video_id
     return split_documents(load_youtube_docs(media_id))
 
 
@@ -212,17 +244,23 @@ _STREAM_SYSTEM = """You are a strict document/transcript analyst. Your ONLY know
 ABSOLUTE RULES:
 1. Use ONLY information stated in the provided excerpts. Zero outside knowledge.
 2. If the excerpts do not clearly contain the answer, reply with exactly: I don't know
-3. Every factual claim must have an inline reference [paragraph N] or [mm:ss] from the excerpt headers.
+3. Every factual claim MUST include an inline reference in EXACTLY one of these two formats:
+   - For video/audio content:  [MM:SS]  e.g. [02:34] or [14:07]  — use the timestamp from the excerpt header.
+   - For documents:            [para N] e.g. [para 3]             — use the paragraph number from the excerpt header.
+   Always use square brackets. Never write timestamps without brackets.
 4. Do NOT invent, infer, extrapolate, or guess.
 5. Keep your answer to 2–5 sentences.
 6. Do not repeat the question or explain what you cannot do."""
 
 _STREAM_USER = """Conversation history (if any):
+{history}
+
+Excerpts (each prefixed with its reference — cite these inline):
 {context}
 
 Question: {question}
 
-Answer using ONLY the excerpts and history above (with inline references), or reply "I don't know":"""
+Answer using ONLY the excerpts above (with inline [MM:SS] or [para N] references), or reply "I don't know":"""
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -256,27 +294,23 @@ async def ask_stream(req: AskRequest):
             yield "data: " + json.dumps({"type": "answer", "value": "I don't know."}) + "\n\n"
             yield "data: " + json.dumps({"type": "end"}) + "\n\n"
             return
-        
-        history = req.history
-        history_text = ""
 
-        for h in history[-5:]:
+        history_text = ""
+        for h in req.history[-5:]:
             history_text += f"Q: {h['question']}\nA: {h['answer']}\n\n"
+
         context = format_docs_with_references(docs)
-        prompt  = ChatPromptTemplate.from_messages([("system", _STREAM_SYSTEM), ("user", _STREAM_USER)])
-        chain   = prompt | _get_streaming_llm() | StrOutputParser()
+        prompt  = ChatPromptTemplate.from_messages([
+            ("system", _STREAM_SYSTEM),
+            ("user",   _STREAM_USER),
+        ])
+        chain = prompt | _get_streaming_llm() | StrOutputParser()
 
         answer_text = ""
-        history_text = ""
-
-        for h in history[-5:]:
-                history_text += f"Q: {h['question']}\nA: {h['answer']}\n\n"
-
-        full_context = history_text + "\n" + context
-
         for token in chain.stream({
-            "context": full_context,
-            "question": req.question
+            "history": history_text.strip() or "(none)",
+            "context": context,
+            "question": req.question,
         }):
             answer_text += token
             yield "data: " + json.dumps({"type": "token", "value": token}) + "\n\n"
@@ -292,7 +326,11 @@ async def ask_stream(req: AskRequest):
     return StreamingResponse(
         token_generator(),
         media_type="text/event-stream",
-        headers={"Cache-Control": "no-cache", "Connection": "keep-alive", "X-Accel-Buffering": "no"},
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",
+        },
     )
 
 
@@ -381,7 +419,7 @@ async def ingest_media(
                 "title": filename,
                 "word_count": word_count,
                 "truncated": truncated,
-                "full_text": full_text,  
+                "full_text": full_text,
             }
 
         # Audio/video branch
@@ -390,22 +428,33 @@ async def ingest_media(
                 "media_id": media_id, "source_type": "upload",
                 "source_url": None,   "local_path": local_path, "title": filename,
             }
+            # Eagerly start transcription + vectorstore build so first /ask is fast.
+            # This runs synchronously during ingest; for large files you may want
+            # to move it to a background task (FastAPI BackgroundTasks).
+            try:
+                get_or_create_vectorstore(media_id, docs_builder=_build_docs)
+                log.info("Vectorstore pre-built for uploaded media %s", media_id)
+            except Exception as e:
+                log.warning("Eager vectorstore build failed for %s: %s", media_id, e)
 
     register_media(media_id, meta)
     return IngestResponse(
         media_id=media_id, source_type=meta["source_type"],
         title=meta["title"], word_count=word_count, truncated=truncated,
     )
-    
-    
+
+
 @app.get("/doc/{media_id}")
 def get_doc(media_id: str):
     meta = get_media_meta(media_id)
 
     if not meta:
-        raise HTTPException(status_code=404, detail="Media not found.")
+        raise HTTPException(
+            status_code=404,
+            detail=f"Media '{media_id}' not found. Make sure you uploaded a .docx file first."
+        )
 
-    # If already cached
+    # If already cached in index
     if "full_text" in meta:
         return {"text": meta["full_text"]}
 
@@ -413,15 +462,16 @@ def get_doc(media_id: str):
         try:
             docs, _ = load_docx_docs(meta.get("local_path", ""))
             full_text = "\n\n".join([doc.page_content for doc in docs])
-
-            # cache it for next time
             meta["full_text"] = full_text
-
             return {"text": full_text}
         except Exception as e:
             raise HTTPException(status_code=500, detail=f"Failed to load document: {e}")
 
-    raise HTTPException(status_code=400, detail="Not a document")
+    raise HTTPException(
+        status_code=400,
+        detail=f"'{media_id}' is a {meta.get('source_type', 'unknown')} source, not a document."
+    )
+
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Routes — Chapters
@@ -435,7 +485,6 @@ def get_chapters(video_id: str):
             docs, _ = load_docx_docs(meta.get("local_path", ""))
         except Exception:
             docs = []
-        # window_sec=0 → purely semantic splits (no time axis in a document)
         result = detect_chapters_from_docs(docs, media_id=video_id, window_sec=80)
         return result.to_dict()
     return detect_chapters(video_id)

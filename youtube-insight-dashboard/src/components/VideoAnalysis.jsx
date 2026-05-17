@@ -1,66 +1,434 @@
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, useCallback } from "react";
 import AskQuestion from "./AskQuestion";
 import Chapters from "./Chapters";
 import Quiz from "./Quiz";
 
+/* ─────────────────────────────────────────────────────────────────────────────
+   MediaPlayer
+   • YouTube  → <iframe> with YouTube IFrame API (postMessage seekTo)
+   • Upload   → <video>  with direct currentTime seek
+   ───────────────────────────────────────────────────────────────────────────── */
 const MediaPlayer = ({ videoData }) => {
-  const videoRef = useRef(null);
+  const videoRef  = useRef(null);   // for <video>
+  const iframeRef = useRef(null);   // for YouTube <iframe>
+  // Track whether the YT player is ready to receive postMessage commands
+  const ytReady   = useRef(false);
 
+  /* ── YouTube IFrame API — listen for "onReady" so we can seek reliably ── */
+  useEffect(() => {
+    if (videoData?.sourceType !== "youtube") return;
+
+    const onMessage = (evt) => {
+      try {
+        const data = typeof evt.data === "string" ? JSON.parse(evt.data) : evt.data;
+        if (data?.event === "onReady") {
+          ytReady.current = true;
+        }
+      } catch (_) {}
+    };
+
+    window.addEventListener("message", onMessage);
+    return () => window.removeEventListener("message", onMessage);
+  }, [videoData?.sourceType]);
+
+  /* ── Timestamp navigation ─────────────────────────────────────────────── */
   useEffect(() => {
     const handler = (e) => {
-      const { seconds } = e.detail;
+      const seconds = Number(e.detail?.seconds ?? 0);
+      if (isNaN(seconds)) return;
 
-      if (videoRef.current) {
-        videoRef.current.currentTime = seconds;
-        videoRef.current.play();
+      if (videoData?.sourceType === "youtube") {
+        // YouTube IFrame API: postMessage seekTo command
+        // Works even before onReady fires in most browsers (queued internally).
+        const iframe = iframeRef.current;
+        if (!iframe) return;
+        iframe.contentWindow?.postMessage(
+          JSON.stringify({
+            event: "command",
+            func: "seekTo",
+            args: [seconds, true],
+          }),
+          "*"
+        );
+        // Also send playVideo so it starts playing after seek
+        iframe.contentWindow?.postMessage(
+          JSON.stringify({ event: "command", func: "playVideo", args: [] }),
+          "*"
+        );
+      } else {
+        // Uploaded / direct video — plain HTML5 seek
+        const vid = videoRef.current;
+        if (!vid) return;
+        vid.currentTime = seconds;
+        vid.play().catch(() => {});  // play() may throw if autoplay blocked
       }
     };
 
     window.addEventListener("knowitfast:timestamp", handler);
     return () => window.removeEventListener("knowitfast:timestamp", handler);
-  }, []);
+    // Re-register whenever sourceType changes so handler captures correct ref
+  }, [videoData?.sourceType]);
 
   if (!videoData) return null;
 
   if (videoData.sourceType === "youtube") {
-  return (
-    <iframe
-      width="100%"
-      height="400"
-      src={`https://www.youtube.com/embed/${videoData.videoId}?enablejsapi=1`}
-      allow="autoplay"
-      allowFullScreen
-    />
-  );
-}
+    return (
+      <iframe
+        ref={iframeRef}
+        width="100%"
+        height="400"
+        /*
+          enablejsapi=1  — enables postMessage IFrame API
+          origin         — required by YouTube for postMessage security
+          autoplay=0     — don't autoplay on load
+        */
+        src={`https://www.youtube.com/embed/${videoData.videoId}?enablejsapi=1&origin=${encodeURIComponent(window.location.origin)}&autoplay=0`}
+        allow="autoplay; encrypted-media"
+        allowFullScreen
+        title="YouTube player"
+        style={{ border: "none", borderRadius: 12 }}
+      />
+    );
+  }
+
   return (
     <video ref={videoRef} controls width="100%" style={{ borderRadius: 12 }}>
       <source src={`http://127.0.0.1:8000/media/${videoData.videoId}`} />
     </video>
   );
 };
+
 /* ─────────────────────────────────────────────────────────────────────────────
-   Inline styles — no external CSS dependency so the file is self-contained.
-   The existing VideoAnalysis.css still applies for .glass-card, .btn-primary etc.
+   DocxViewer — elite document reader
+   • Paragraph-level navigation + persistent glow highlight from [para N] clicks
+   • Inline search with match count and prev/next navigation
+   • Reading-progress bar at top
+   • Paragraph number gutter
+   • Detects heading-style paragraphs (short, title-case) and renders them larger
    ───────────────────────────────────────────────────────────────────────────── */
+const DocxViewer = ({ mediaId }) => {
+  const [paragraphs,    setParagraphs]    = useState([]);
+  const [loading,       setLoading]       = useState(true);
+  const [searchQuery,   setSearchQuery]   = useState("");
+  const [matchIndex,    setMatchIndex]    = useState(0);
+  const [activeParaIdx, setActiveParaIdx] = useState(-1);
+  const [scrollPct,     setScrollPct]     = useState(0);
 
-   const DocxViewer = ({ mediaId }) => {
-  const [text, setText] = useState("");
+  const paraRefs   = useRef([]);
+  const scrollRef  = useRef(null);
+  const activeTimer = useRef(null);
 
+  // ── Fetch document ────────────────────────────────────────────────────────
   useEffect(() => {
+    setLoading(true);
     fetch(`http://127.0.0.1:8000/doc/${mediaId}`)
-      .then((res) => res.json())
-      .then((data) => setText(data.text))
-      .catch(() => setText("Failed to load document"));
+      .then((r) => r.json())
+      .then((data) => {
+        const paras = (data.text || "").split(/\n\n+/).filter((p) => p.trim().length > 0);
+        setParagraphs(paras);
+      })
+      .catch(() => setParagraphs(["⚠️ Failed to load document."]))
+      .finally(() => setLoading(false));
   }, [mediaId]);
 
+  // ── Scroll progress ───────────────────────────────────────────────────────
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+    const onScroll = () => {
+      const pct = el.scrollHeight - el.clientHeight > 0
+        ? Math.round((el.scrollTop / (el.scrollHeight - el.clientHeight)) * 100)
+        : 0;
+      setScrollPct(pct);
+    };
+    el.addEventListener("scroll", onScroll);
+    return () => el.removeEventListener("scroll", onScroll);
+  }, [loading]);
+
+  // ── Navigate to paragraph (from AI answer [para N] click) ────────────────
+  const goToParagraph = (idx) => {
+    const el = paraRefs.current[idx];
+    if (!el) return;
+    el.scrollIntoView({ behavior: "smooth", block: "center" });
+    setActiveParaIdx(idx);
+    // Clear previous timer
+    if (activeTimer.current) clearTimeout(activeTimer.current);
+    activeTimer.current = setTimeout(() => setActiveParaIdx(-1), 3000);
+  };
+
+  useEffect(() => {
+    const handler = (e) => {
+      const idx = Number(e.detail?.paragraph ?? -1);
+      if (idx >= 0) goToParagraph(idx);
+    };
+    window.addEventListener("knowitfast:paragraph", handler);
+    return () => window.removeEventListener("knowitfast:paragraph", handler);
+  }, []);
+
+  // ── Search: collect all match positions ──────────────────────────────────
+  const searchMatches = React.useMemo(() => {
+    if (!searchQuery.trim()) return [];
+    const q = searchQuery.toLowerCase();
+    const hits = [];
+    paragraphs.forEach((p, pi) => {
+      let start = 0;
+      const lower = p.toLowerCase();
+      while (true) {
+        const pos = lower.indexOf(q, start);
+        if (pos === -1) break;
+        hits.push({ pi, pos });
+        start = pos + 1;
+      }
+    });
+    return hits;
+  }, [searchQuery, paragraphs]);
+
+  // Reset match index when query changes
+  useEffect(() => { setMatchIndex(0); }, [searchQuery]);
+
+  // Jump to current match
+  useEffect(() => {
+    if (!searchMatches.length) return;
+    const m = searchMatches[matchIndex];
+    if (m) goToParagraph(m.pi);
+  }, [matchIndex, searchMatches]);
+
+  // ── Render paragraph text with search highlights ─────────────────────────
+  const renderText = (text, paraIdx) => {
+    if (!searchQuery.trim()) return text;
+    const q = searchQuery.toLowerCase();
+    const parts = [];
+    let remaining = text;
+    let offset = 0;
+
+    while (true) {
+      const pos = remaining.toLowerCase().indexOf(q);
+      if (pos === -1) { parts.push(remaining); break; }
+      if (pos > 0) parts.push(remaining.slice(0, pos));
+
+      // Is this the currently-focused match?
+      const globalIdx = searchMatches.findIndex(
+        (m) => m.pi === paraIdx && m.pos === offset + pos
+      );
+      const isFocused = globalIdx === matchIndex;
+
+      parts.push(
+        <mark
+          key={`${paraIdx}-${pos}`}
+          style={{
+            background: isFocused ? "rgba(250,204,21,0.55)" : "rgba(250,204,21,0.22)",
+            color: "#fff",
+            borderRadius: 3,
+            padding: "0 2px",
+            boxShadow: isFocused ? "0 0 0 2px rgba(250,204,21,0.6)" : "none",
+          }}
+        >
+          {remaining.slice(pos, pos + q.length)}
+        </mark>
+      );
+      offset += pos + q.length;
+      remaining = remaining.slice(pos + q.length);
+    }
+    return parts;
+  };
+
+  // ── Heuristic: is this paragraph a heading? ───────────────────────────────
+  const isHeading = (text) => {
+    const trimmed = text.trim();
+    return (
+      trimmed.length < 80 &&
+      trimmed.length > 2 &&
+      !/[.!?]$/.test(trimmed) &&       // doesn't end in sentence punctuation
+      /^[A-Z0-9]/.test(trimmed)        // starts with capital or number
+    );
+  };
+
+  // ── Render ────────────────────────────────────────────────────────────────
   return (
-    <div style={{ whiteSpace: "pre-wrap", lineHeight: 1.6 }}>
-      {text || "Loading document..."}
+    <div style={{ display: "flex", flexDirection: "column", height: "100%", minHeight: 0 }}>
+
+      {/* ── Toolbar ── */}
+      <div style={{
+        display: "flex", alignItems: "center", gap: 8,
+        padding: "8px 12px",
+        background: "rgba(255,255,255,0.03)",
+        borderBottom: "1px solid rgba(255,255,255,0.07)",
+        flexShrink: 0,
+      }}>
+        {/* Search box */}
+        <div style={{ position: "relative", flex: 1, maxWidth: 280 }}>
+          <span style={{ position: "absolute", left: 10, top: "50%", transform: "translateY(-50%)", fontSize: 13, opacity: 0.4 }}>🔍</span>
+          <input
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            placeholder="Search in document…"
+            style={{
+              width: "100%", boxSizing: "border-box",
+              background: "rgba(255,255,255,0.06)",
+              border: "1px solid rgba(255,255,255,0.1)",
+              borderRadius: 8, padding: "6px 10px 6px 30px",
+              color: "#fff", fontSize: 13, outline: "none",
+            }}
+          />
+        </div>
+
+        {/* Match count + prev/next */}
+        {searchQuery.trim() && (
+          <div style={{ display: "flex", alignItems: "center", gap: 6, flexShrink: 0 }}>
+            <span style={{ fontSize: 12, color: "rgba(255,255,255,0.4)", whiteSpace: "nowrap" }}>
+              {searchMatches.length > 0 ? `${matchIndex + 1} / ${searchMatches.length}` : "No matches"}
+            </span>
+            {searchMatches.length > 0 && <>
+              <button
+                onClick={() => setMatchIndex((i) => (i - 1 + searchMatches.length) % searchMatches.length)}
+                style={navBtnStyle}
+              >↑</button>
+              <button
+                onClick={() => setMatchIndex((i) => (i + 1) % searchMatches.length)}
+                style={navBtnStyle}
+              >↓</button>
+            </>}
+          </div>
+        )}
+
+        {/* Spacer + stats */}
+        <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 10 }}>
+          <span style={{ fontSize: 11, color: "rgba(255,255,255,0.3)", whiteSpace: "nowrap" }}>
+            {paragraphs.length} paragraphs
+          </span>
+          <span style={{ fontSize: 11, color: "rgba(255,255,255,0.3)", whiteSpace: "nowrap" }}>
+            {scrollPct}% read
+          </span>
+        </div>
+      </div>
+
+      {/* ── Reading progress bar ── */}
+      <div style={{ height: 2, background: "rgba(255,255,255,0.06)", flexShrink: 0 }}>
+        <div style={{
+          height: "100%",
+          width: `${scrollPct}%`,
+          background: "linear-gradient(90deg, #7c3aed, #06b6d4)",
+          transition: "width 0.2s",
+        }} />
+      </div>
+
+      {/* ── Document body ── */}
+      <div
+        ref={scrollRef}
+        style={{
+          flex: 1, overflowY: "auto", padding: "24px 20px 32px",
+          scrollBehavior: "smooth",
+        }}
+      >
+        {loading ? (
+          <div style={{ textAlign: "center", paddingTop: 40, color: "rgba(255,255,255,0.35)" }}>
+            <div style={{ fontSize: 28, marginBottom: 10 }}>📄</div>
+            Loading document…
+          </div>
+        ) : (
+          <div style={{ maxWidth: 720, margin: "0 auto" }}>
+            {paragraphs.map((p, i) => {
+              const heading = isHeading(p);
+              const isActive = activeParaIdx === i;
+              return (
+                <div
+                  key={i}
+                  ref={(el) => (paraRefs.current[i] = el)}
+                  style={{
+                    display: "flex",
+                    gap: 14,
+                    marginBottom: heading ? 20 : 12,
+                    padding: "8px 12px",
+                    borderRadius: 8,
+                    background: isActive
+                      ? "rgba(124,58,237,0.18)"
+                      : "transparent",
+                    boxShadow: isActive
+                      ? "0 0 0 1px rgba(124,58,237,0.45), 0 0 18px rgba(124,58,237,0.15)"
+                      : "none",
+                    transition: "background 0.5s, box-shadow 0.5s",
+                  }}
+                >
+                  {/* Paragraph number gutter */}
+                  <span style={{
+                    flexShrink: 0,
+                    width: 28,
+                    paddingTop: heading ? 4 : 2,
+                    fontSize: 10,
+                    fontFamily: "'SF Mono','Fira Code',monospace",
+                    color: isActive ? "rgba(167,139,250,0.8)" : "rgba(255,255,255,0.18)",
+                    textAlign: "right",
+                    userSelect: "none",
+                    transition: "color 0.4s",
+                  }}>
+                    {i + 1}
+                  </span>
+
+                  {/* Left accent bar for active paragraph */}
+                  <div style={{
+                    width: 2,
+                    flexShrink: 0,
+                    borderRadius: 1,
+                    background: isActive
+                      ? "linear-gradient(180deg,#7c3aed,#06b6d4)"
+                      : "transparent",
+                    transition: "background 0.4s",
+                  }} />
+
+                  {/* Paragraph content */}
+                  {heading ? (
+                    <h3 style={{
+                      margin: 0,
+                      fontSize: 15,
+                      fontWeight: 700,
+                      color: isActive ? "#e9d5ff" : "rgba(255,255,255,0.92)",
+                      lineHeight: 1.5,
+                      letterSpacing: "0.01em",
+                    }}>
+                      {renderText(p, i)}
+                    </h3>
+                  ) : (
+                    <p style={{
+                      margin: 0,
+                      fontSize: 14,
+                      lineHeight: 1.8,
+                      color: isActive ? "#f5f3ff" : "rgba(255,255,255,0.72)",
+                      transition: "color 0.4s",
+                    }}>
+                      {renderText(p, i)}
+                    </p>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+
+      {/* Inline styles */}
+      <style>{`
+        input::placeholder { color: rgba(255,255,255,0.25) !important; }
+        input:focus { border-color: rgba(124,58,237,0.5) !important; box-shadow: 0 0 0 3px rgba(124,58,237,0.15); }
+      `}</style>
     </div>
   );
 };
 
+// Small reusable nav button style (defined outside so it doesn't re-create on every render)
+const navBtnStyle = {
+  background: "rgba(255,255,255,0.07)",
+  border: "1px solid rgba(255,255,255,0.1)",
+  color: "rgba(255,255,255,0.6)",
+  borderRadius: 6,
+  padding: "3px 8px",
+  fontSize: 12,
+  cursor: "pointer",
+  lineHeight: 1,
+};
+
+/* ─────────────────────────────────────────────────────────────────────────────
+   Styles (unchanged from original)
+   ───────────────────────────────────────────────────────────────────────────── */
 const S = {
   inputPanel: {
     display: "flex",
@@ -170,9 +538,6 @@ const MAX_DOCX_WORDS = 20_000;
 const ALLOWED_VIDEO_AUDIO = [".mp4", ".mp3", ".wav", ".mkv", ".m4a", ".webm"];
 const ALLOWED_DOC = [".docx", ".doc"];
 
-/* ─────────────────────────────────────────────────────────────────────────────
-   Helper: extract YouTube ID
-   ───────────────────────────────────────────────────────────────────────────── */
 function extractYouTubeId(url) {
   try {
     const u = new URL(url);
@@ -193,17 +558,17 @@ const VideoAnalysis = ({
   user,
   onOpenAuth,
 }) => {
-  const [activeTab, setActiveTab] = useState("ask");
-  const [inputMode, setInputMode] = useState("youtube"); // youtube | upload | docx
-  const [videoUrl, setVideoUrl] = useState("");
-  const [videoId, setVideoId] = useState("");
-  const [videoTitle, setVideoTitle] = useState("");
-  const [sourceType, setSourceType] = useState("youtube");
-  const [error, setError] = useState("");
-  const [warnMsg, setWarnMsg] = useState("");
-  const [loading, setLoading] = useState(false);
-  const [docxMeta, setDocxMeta] = useState(null); // {word_count, truncated}
-  const [drag, setDrag] = useState(false);
+  const [activeTab,   setActiveTab]   = useState("ask");
+  const [inputMode,   setInputMode]   = useState("youtube");
+  const [videoUrl,    setVideoUrl]    = useState("");
+  const [videoId,     setVideoId]     = useState("");
+  const [videoTitle,  setVideoTitle]  = useState("");
+  const [sourceType,  setSourceType]  = useState("youtube");
+  const [error,       setError]       = useState("");
+  const [warnMsg,     setWarnMsg]     = useState("");
+  const [loading,     setLoading]     = useState(false);
+  const [docxMeta,    setDocxMeta]    = useState(null);
+  const [drag,        setDrag]        = useState(false);
 
   const fileInputRef = useRef(null);
   const docxInputRef = useRef(null);
@@ -226,7 +591,7 @@ const VideoAnalysis = ({
     }
   }, [currentVideo]);
 
-  /* ── YouTube load ───────────────────────────────────────────────────────── */
+  /* ── YouTube load ─────────────────────────────────────────────────────── */
   const handleLoadVideo = async () => {
     setError("");
     setWarnMsg("");
@@ -241,10 +606,10 @@ const VideoAnalysis = ({
     setSourceType("youtube");
     setLoading(true);
     try {
-      const res = await fetch(
+      const res  = await fetch(
         `https://noembed.com/embed?url=https://www.youtube.com/watch?v=${id}`,
       );
-      const data = await res.json();
+      const data  = await res.json();
       const title = data.title || "Unknown Video";
       setVideoTitle(title);
       const videoData = {
@@ -262,19 +627,15 @@ const VideoAnalysis = ({
     }
   };
 
-  /* ── Generic file ingest (audio / video) ───────────────────────────────── */
+  /* ── Generic file ingest (audio / video) ─────────────────────────────── */
   const handleMediaUpload = async (file) => {
     if (!file) return;
     const ext = "." + file.name.split(".").pop().toLowerCase();
     if (!ALLOWED_VIDEO_AUDIO.includes(ext)) {
-      setError(
-        `Unsupported file type "${ext}". Allowed: ${ALLOWED_VIDEO_AUDIO.join(", ")}`,
-      );
+      setError(`Unsupported file type "${ext}". Allowed: ${ALLOWED_VIDEO_AUDIO.join(", ")}`);
       return;
     }
-    setError("");
-    setWarnMsg("");
-    setDocxMeta(null);
+    setError(""); setWarnMsg(""); setDocxMeta(null);
     setVideoTitle(file.name);
     setSourceType("upload");
     setLoading(true);
@@ -282,17 +643,14 @@ const VideoAnalysis = ({
     try {
       const formData = new FormData();
       formData.append("file", file);
-      const res = await fetch("http://127.0.0.1:8000/ingest", {
-        method: "POST",
-        body: formData,
-      });
+      const res  = await fetch("http://127.0.0.1:8000/ingest", { method: "POST", body: formData });
       if (!res.ok) throw new Error(await res.text());
       const data = await res.json();
 
       const mediaData = {
-        videoId: data.media_id,
-        title: data.title || file.name,
-        timestamp: new Date().toISOString(),
+        videoId:    data.media_id,
+        title:      data.title || file.name,
+        timestamp:  new Date().toISOString(),
         sourceType: data.source_type || "upload",
       };
       setVideoId(data.media_id);
@@ -307,17 +665,15 @@ const VideoAnalysis = ({
     }
   };
 
-  /* ── DOCX ingest ────────────────────────────────────────────────────────── */
+  /* ── DOCX ingest ──────────────────────────────────────────────────────── */
   const handleDocxUpload = async (file) => {
     if (!file) return;
     const ext = "." + file.name.split(".").pop().toLowerCase();
     if (!ALLOWED_DOC.includes(ext)) {
-      setError(`Only .docx / .doc files are accepted here.`);
+      setError("Only .docx / .doc files are accepted here.");
       return;
     }
-    setError("");
-    setWarnMsg("");
-    setDocxMeta(null);
+    setError(""); setWarnMsg(""); setDocxMeta(null);
     setVideoTitle(file.name);
     setSourceType("docx");
     setLoading(true);
@@ -325,10 +681,7 @@ const VideoAnalysis = ({
     try {
       const formData = new FormData();
       formData.append("file", file);
-      const res = await fetch("http://127.0.0.1:8000/ingest", {
-        method: "POST",
-        body: formData,
-      });
+      const res  = await fetch("http://127.0.0.1:8000/ingest", { method: "POST", body: formData });
       if (!res.ok) throw new Error(await res.text());
       const data = await res.json();
 
@@ -340,11 +693,11 @@ const VideoAnalysis = ({
       }
 
       const mediaData = {
-        videoId: data.media_id,
-        title: data.title || file.name,
-        timestamp: new Date().toISOString(),
+        videoId:    data.media_id,
+        title:      data.title || file.name,
+        timestamp:  new Date().toISOString(),
         sourceType: "docx",
-        wordCount: data.word_count,
+        wordCount:  data.word_count,
       };
       setVideoId(data.media_id);
       setVideoTitle(mediaData.title);
@@ -358,7 +711,7 @@ const VideoAnalysis = ({
     }
   };
 
-  /* ── Drag-and-drop (drop zone for upload / docx panels) ────────────────── */
+  /* ── Drag-and-drop ────────────────────────────────────────────────────── */
   const onDrop = (e) => {
     e.preventDefault();
     setDrag(false);
@@ -384,15 +737,24 @@ const VideoAnalysis = ({
   const wordPct = docxMeta
     ? Math.round((docxMeta.word_count / MAX_DOCX_WORDS) * 100)
     : 0;
-  const playerData = videoId
-    ? {
-        videoId,
-        sourceType,
-      }
-    : null;
+
+  const playerData = videoId ? { videoId, sourceType } : null;
+
+  // Only pass a mediaId to DocxViewer when we are certain it came from /ingest
+  // (i.e. sourceType is confirmed "docx"). This prevents a YouTube video ID from
+  // being sent to /doc/ when sourceType and videoId states are briefly out of sync.
+  const docxMediaId =
+    sourceType === "docx" &&
+    videoId &&
+    // YouTube IDs are exactly 11 chars; /ingest media_ids are 12-char hex strings.
+    // Double-check by excluding anything that looks like a YouTube ID.
+    videoId.length !== 11
+      ? videoId
+      : null;
+
   return (
     <div className="section-grid">
-      {/* ── Hero ─────────────────────────────────────────────────────────── */}
+      {/* ── Hero ──────────────────────────────────────────────────────────── */}
       <div className="glass-card hero-card">
         <div className="hero-badge">
           <span>KnowItFast analysis workspace</span>
@@ -402,8 +764,7 @@ const VideoAnalysis = ({
         </h1>
         <p className="hero-subtitle">
           Paste a YouTube URL, upload audio/video, or drop a Word document.
-          KnowItFast builds transcript intelligence and turns long content into
-          answers.
+          KnowItFast builds transcript intelligence and turns long content into answers.
         </p>
         <div className="hero-actions" style={{ alignItems: "center" }}>
           {!isSignedIn && (
@@ -413,35 +774,27 @@ const VideoAnalysis = ({
           )}
           <div className="chip good">
             <span>●</span>
-            <span>
-              {isSignedIn ? `Synced as ${user?.name || "user"}` : "Guest mode"}
-            </span>
+            <span>{isSignedIn ? `Synced as ${user?.name || "user"}` : "Guest mode"}</span>
           </div>
-          {videoId && <div style={S.metaChip}> {sourceLabel}</div>}
+          {videoId && <div style={S.metaChip}>{sourceLabel}</div>}
         </div>
       </div>
 
-      {/* ── Load content panel ───────────────────────────────────────────── */}
+      {/* ── Load content panel ────────────────────────────────────────────── */}
       <div className="glass-card pad-lg">
-        <h2 className="section-title" style={{ marginBottom: 16 }}>
-          Load content
-        </h2>
+        <h2 className="section-title" style={{ marginBottom: 16 }}>Load content</h2>
 
         {/* Input-type selector */}
         <div style={{ display: "flex", gap: 8, marginBottom: 18 }}>
           {[
             { id: "youtube", label: "▶  YouTube" },
-            { id: "upload", label: "🎵  Audio / Video" },
-            { id: "docx", label: "📄  Word Doc" },
+            { id: "upload",  label: "🎵  Audio / Video" },
+            { id: "docx",    label: "📄  Word Doc" },
           ].map(({ id, label }) => (
             <button
               key={id}
               style={S.inputTypeBtn(inputMode === id)}
-              onClick={() => {
-                setInputMode(id);
-                setError("");
-                setWarnMsg("");
-              }}
+              onClick={() => { setInputMode(id); setError(""); setWarnMsg(""); }}
             >
               {label}
             </button>
@@ -452,8 +805,7 @@ const VideoAnalysis = ({
         {inputMode === "youtube" && (
           <div style={S.inputPanel}>
             <p className="text-secondary" style={{ margin: 0 }}>
-              Paste a YouTube URL and press Load — the transcript is fetched
-              automatically.
+              Paste a YouTube URL and press Load — the transcript is fetched automatically.
             </p>
             <div className="input-row" style={{ flexWrap: "wrap", gap: 8 }}>
               <input
@@ -465,11 +817,7 @@ const VideoAnalysis = ({
                 onKeyDown={(e) => e.key === "Enter" && handleLoadVideo()}
                 style={{ flex: 1, minWidth: 220 }}
               />
-              <button
-                className="btn-primary"
-                onClick={handleLoadVideo}
-                disabled={loading}
-              >
+              <button className="btn-primary" onClick={handleLoadVideo} disabled={loading}>
                 {loading ? "Loading…" : "Load video"}
               </button>
             </div>
@@ -480,32 +828,21 @@ const VideoAnalysis = ({
         {inputMode === "upload" && (
           <div style={S.inputPanel}>
             <p className="text-secondary" style={{ margin: 0 }}>
-              Upload an audio or video file. Whisper transcribes it server-side
-              — no YouTube needed.
+              Upload an audio or video file. Whisper transcribes it server-side — no YouTube needed.
               <br />
               <span style={{ fontSize: 12, opacity: 0.6 }}>
                 Supported: {ALLOWED_VIDEO_AUDIO.join("  ")} · Max 50 MB
               </span>
             </p>
-
             <div
               style={S.uploadZone(drag)}
-              onDragOver={(e) => {
-                e.preventDefault();
-                setDrag(true);
-              }}
+              onDragOver={(e) => { e.preventDefault(); setDrag(true); }}
               onDragLeave={() => setDrag(false)}
               onDrop={onDrop}
               onClick={() => fileInputRef.current?.click()}
             >
               <div style={{ fontSize: 36, marginBottom: 8 }}>🎬</div>
-              <p
-                style={{
-                  margin: 0,
-                  color: "rgba(255,255,255,0.6)",
-                  fontSize: 14,
-                }}
-              >
+              <p style={{ margin: 0, color: "rgba(255,255,255,0.6)", fontSize: 14 }}>
                 {loading ? "Uploading…" : "Click or drag & drop a file here"}
               </p>
               <input
@@ -523,36 +860,23 @@ const VideoAnalysis = ({
         {inputMode === "docx" && (
           <div style={S.inputPanel}>
             <p className="text-secondary" style={{ margin: 0 }}>
-              Upload a <strong>.docx</strong> Word document. No transcription
-              needed — the text is parsed directly and indexed for Q&amp;A,
-              chapters, and quiz generation.
+              Upload a <strong>.docx</strong> Word document. No transcription needed — the text is
+              parsed directly and indexed for Q&amp;A, chapters, and quiz generation.
               <br />
               <span style={{ fontSize: 12, opacity: 0.6 }}>
                 Limit: {MAX_DOCX_WORDS.toLocaleString()} words · Max 50 MB
               </span>
             </p>
-
             <div
               style={S.uploadZone(drag)}
-              onDragOver={(e) => {
-                e.preventDefault();
-                setDrag(true);
-              }}
+              onDragOver={(e) => { e.preventDefault(); setDrag(true); }}
               onDragLeave={() => setDrag(false)}
               onDrop={onDrop}
               onClick={() => docxInputRef.current?.click()}
             >
               <div style={{ fontSize: 36, marginBottom: 8 }}>📝</div>
-              <p
-                style={{
-                  margin: 0,
-                  color: "rgba(255,255,255,0.6)",
-                  fontSize: 14,
-                }}
-              >
-                {loading
-                  ? "Processing document…"
-                  : "Click or drag & drop a .docx file"}
+              <p style={{ margin: 0, color: "rgba(255,255,255,0.6)", fontSize: 14 }}>
+                {loading ? "Processing document…" : "Click or drag & drop a .docx file"}
               </p>
               <input
                 ref={docxInputRef}
@@ -562,22 +886,10 @@ const VideoAnalysis = ({
                 onChange={(e) => handleDocxUpload(e.target.files?.[0])}
               />
             </div>
-
-            {/* Word-count bar shown after successful upload */}
             {docxMeta && (
               <div>
-                <div
-                  style={{
-                    display: "flex",
-                    justifyContent: "space-between",
-                    fontSize: 12,
-                    color: "rgba(255,255,255,0.5)",
-                    marginBottom: 2,
-                  }}
-                >
-                  <span>
-                    {docxMeta.word_count.toLocaleString()} words indexed
-                  </span>
+                <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12, color: "rgba(255,255,255,0.5)", marginBottom: 2 }}>
+                  <span>{docxMeta.word_count.toLocaleString()} words indexed</span>
                   <span>{MAX_DOCX_WORDS.toLocaleString()} word limit</span>
                 </div>
                 <div style={S.wordBar(wordPct)}>
@@ -589,75 +901,50 @@ const VideoAnalysis = ({
         )}
 
         {/* Errors / Warnings */}
-        {error && (
-          <div style={{ ...S.statusBadge("error"), marginTop: 12 }}>
-            ⚠️ {error}
-          </div>
-        )}
-        {warnMsg && (
-          <div style={{ ...S.statusBadge("warn"), marginTop: 12 }}>
-            ⚡ {warnMsg}
-          </div>
-        )}
+        {error   && <div style={{ ...S.statusBadge("error"), marginTop: 12 }}>⚠️ {error}</div>}
+        {warnMsg && <div style={{ ...S.statusBadge("warn"),  marginTop: 12 }}>⚡ {warnMsg}</div>}
       </div>
 
-      {/* ── Analysis area ────────────────────────────────────────────────── */}
+      {/* ── Analysis area ─────────────────────────────────────────────────── */}
       {videoId && (
         <>
           {/* Header */}
           <div className="video-header glass-card">
             <div className="video-header-content">
-              <div className="video-icon">✨</div>
               <div className="video-details">
                 <h2 style={{ margin: 0 }}>Analysis ready</h2>
-                <p
-                  className="video-title-display"
-                  style={{ margin: "6px 0 0 0" }}
-                >
+                <p className="video-title-display" style={{ margin: "6px 0 0 0" }}>
                   {videoTitle || "Loading…"}
                 </p>
               </div>
             </div>
             <div className="card-row">
               <div style={S.metaChip}>{sourceLabel}</div>
-              {sourceType === "youtube" && (
-                <div style={S.metaChip}>⏱ Timestamps enabled</div>
-              )}
-              {sourceType === "docx" && (
-                <div style={S.metaChip}>📖 Page refs enabled</div>
-              )}
-              {sourceType === "upload" && (
-                <div style={S.metaChip}>🎙 Whisper transcript</div>
-              )}
-              {docxMeta && (
-                <div style={S.metaChip}>
-                  {docxMeta.word_count.toLocaleString()} words
-                </div>
-              )}
+              {sourceType === "youtube" && <div style={S.metaChip}> Timestamps enabled</div>}
+              {sourceType === "docx"    && <div style={S.metaChip}> Page refs enabled</div>}
+              {sourceType === "upload"  && <div style={S.metaChip}> Whisper transcript</div>}
+              {docxMeta && <div style={S.metaChip}>{docxMeta.word_count.toLocaleString()} words</div>}
             </div>
           </div>
 
-          {/* Player / placeholder */}
+          {/* Player / Viewer */}
           <div className="video-player-container">
-            {/* 🎬 MEDIA PLAYER (handles everything) */}
             {(sourceType === "youtube" || sourceType === "upload") && (
               <div className="video-player">
                 <MediaPlayer videoData={playerData} />
               </div>
             )}
-
-            {/* 📄 DOCX VIEWER */}
-            {sourceType === "docx" && (
-              <div
-                style={{
-                  aspectRatio: "16/9",
-                  padding: 20,
-                  overflowY: "auto",
-                  borderRadius: 12,
-                  background: "rgba(255,255,255,0.03)",
-                }}
-              >
-                <DocxViewer mediaId={videoId} />
+            {sourceType === "docx" && docxMediaId && (
+              <div style={{
+                height: 480,
+                borderRadius: 12,
+                overflow: "hidden",
+                background: "rgba(255,255,255,0.02)",
+                border: "1px solid rgba(255,255,255,0.07)",
+                display: "flex",
+                flexDirection: "column",
+              }}>
+                <DocxViewer mediaId={docxMediaId} />
               </div>
             )}
           </div>
@@ -666,31 +953,15 @@ const VideoAnalysis = ({
           <div className="tabs-section glass-card pad-lg">
             <div style={S.tabBar}>
               {["ask", "chapters", "quiz"].map((t) => (
-                <button
-                  key={t}
-                  style={S.pill(activeTab === t)}
-                  onClick={() => setActiveTab(t)}
-                >
-                  {t === "ask"
-                    ? "Ask Question"
-                    : t === "chapters"
-                      ? "Chapters"
-                      : "Quiz"}
+                <button key={t} style={S.pill(activeTab === t)} onClick={() => setActiveTab(t)}>
+                  {t === "ask" ? "Ask Question" : t === "chapters" ? "Chapters" : "Quiz"}
                 </button>
               ))}
             </div>
             <div className="tab-content">
-              {activeTab === "ask" && (
-                <AskQuestion
-                  videoData={currentVideo || { videoId, sourceType }}
-                />
-              )}
-              {activeTab === "chapters" && (
-                <Chapters videoData={currentVideo || { videoId, sourceType }} />
-              )}
-              {activeTab === "quiz" && (
-                <Quiz videoData={currentVideo || { videoId, sourceType }} />
-              )}
+              {activeTab === "ask"      && <AskQuestion videoData={currentVideo || { videoId, sourceType }} />}
+              {activeTab === "chapters" && <Chapters    videoData={currentVideo || { videoId, sourceType }} />}
+              {activeTab === "quiz"     && <Quiz        videoData={currentVideo || { videoId, sourceType }} />}
             </div>
           </div>
 
@@ -700,33 +971,19 @@ const VideoAnalysis = ({
             <ul className="tips-list">
               <li>Ask specific questions for more precise answers.</li>
               {sourceType === "youtube" && (
-                <li>
-                  Click any <strong>[mm:ss]</strong> timestamp in an answer to
-                  jump to that moment.
-                </li>
+                <li>Click any <strong>[mm:ss]</strong> timestamp in an answer to jump to that moment.</li>
               )}
               {sourceType === "docx" && (
-                <li>
-                  Click any <strong>[para N]</strong> reference to locate the
-                  passage in your document.
-                </li>
+                <li>Click any <strong>[para N]</strong> reference to locate the passage in your document.</li>
               )}
               {sourceType === "upload" && (
-                <li>
-                  Click any <strong>[mm:ss]</strong> reference to see the
-                  transcript position.
-                </li>
+                <li>Click any <strong>[mm:ss]</strong> reference to seek the video to that moment.</li>
               )}
-              <li>
-                Use the Chapters tab to get a structured breakdown of the
-                content.
-              </li>
+              <li>Use the Chapters tab to get a structured breakdown of the content.</li>
               <li>Generate a Quiz to test your understanding instantly.</li>
-              {isSignedIn ? (
-                <li>Your history is saved and synced across devices.</li>
-              ) : (
-                <li>Sign in to keep your history across devices.</li>
-              )}
+              {isSignedIn
+                ? <li>Your history is saved and synced across devices.</li>
+                : <li>Sign in to keep your history across devices.</li>}
             </ul>
           </div>
         </>

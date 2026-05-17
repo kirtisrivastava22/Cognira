@@ -99,8 +99,12 @@ def load_youtube_docs(video_id: str):
 
 def split_documents(docs):
     """
-    Sentence-aware chunking: prefer splitting on sentence boundaries,
-    preserving timestamp metadata from the source chunk.
+    Sentence-aware chunking: prefer splitting on sentence boundaries.
+
+    FIX: preserve ALL metadata fields from the source doc (not just "start").
+    This is critical for docx docs which carry source="docx", paragraph=N, page=N.
+    Without this, all metadata is lost after splitting and format_docs_with_references
+    can't distinguish docx chunks from video chunks.
     """
     splitter = RecursiveCharacterTextSplitter(
         chunk_size=500,
@@ -115,10 +119,11 @@ def split_documents(docs):
             text = text.strip()
             if len(text) < 20:
                 continue
+            # Copy ALL metadata from the parent doc, not just "start"
             chunks.append(
                 Document(
                     page_content=text,
-                    metadata={"start": doc.metadata["start"]}
+                    metadata=dict(doc.metadata)   # full copy
                 )
             )
 
@@ -190,15 +195,24 @@ def rerank_docs_by_timestamp_density(docs):
 # =========================
 
 def format_docs_with_references(docs):
+    """
+    Format retrieved docs for the LLM prompt.
+
+    docx docs  → [para N] prefix  (paragraph number from metadata)
+    video docs → [MM:SS] prefix   (timestamp from metadata)
+
+    The LLM is instructed to cite these exact tags inline, which the
+    frontend regex then converts to clickable buttons.
+    """
     formatted = []
 
     for doc in docs:
         source = doc.metadata.get("source", "video")
 
         if source == "docx":
-            page = doc.metadata.get("page", 0)
             para = doc.metadata.get("paragraph", 0)
-            formatted.append(f"[page {page}, paragraph {para}] {doc.page_content}")
+            # Use [para N] format — matches frontend COMBINED_RE and prompt rules
+            formatted.append(f"[para {para}] {doc.page_content}")
         else:
             ts = doc.metadata.get("start", 0)
             mm, ss = divmod(int(ts), 60)
@@ -217,17 +231,20 @@ _STRICT_PROMPT = PromptTemplate.from_template(
 RULES — follow every single one:
 1. Use ONLY facts stated in the transcript. No outside knowledge. No inference. No guessing.
 2. If the transcript does not clearly answer the question, reply exactly: I don't know
-3. Every factual claim must include an inline timestamp like [mm:ss] taken directly from the excerpts.
+3. Every factual claim must include an inline reference taken EXACTLY from the excerpt header:
+   - For video/audio: use [MM:SS] e.g. [02:34]
+   - For documents:   use [para N] e.g. [para 3]
+   Always use square brackets. Never omit the reference.
 4. Keep answers to 2-5 sentences.
 5. Do not repeat the question.
 6. Do not apologise or explain what you cannot do — just say "I don't know".
 
-Transcript excerpts (each prefixed with its timestamp):
+Excerpts (each prefixed with its reference — cite these inline):
 {context}
 
 Question: {question}
 
-Answer (cite inline timestamps or reply "I don't know"):"""
+Answer (cite inline references or reply "I don't know"):"""
 )
 
 
@@ -253,7 +270,7 @@ def _looks_like_hallucination(answer: str, docs) -> bool:
 
     answer_timestamps = re.findall(r'\[(\d{2}):(\d{2})\]', answer)
     if not answer_timestamps:
-        return False   # no citations — cannot judge
+        return False   # no timestamp citations — cannot judge
 
     doc_seconds = set()
     for doc in docs:

@@ -5,69 +5,64 @@ import "./AskQuestion.css";
    AskQuestion — works for YouTube, uploaded audio/video, AND .docx uploads.
 
    Reference rendering:
-     YouTube / audio  →  [mm:ss]  clickable — opens YouTube at timestamp
-                                              or fires knowitfast:timestamp event
+     YouTube / audio  →  [mm:ss]  clickable — fires knowitfast:timestamp event
      DOCX             →  [para N] clickable — fires knowitfast:paragraph event
-                                              (host can scroll to paragraph)
 
-   Both reference types are rendered as <button> elements in the answer HTML
-   so they are keyboard-accessible.
+   FIX: Use a single-pass replacement to avoid double-processing HTML.
+        Removed FLEX_TS_RE (bare MM:SS) — it caused false matches inside
+        already-converted <button> HTML and on innocent numbers like "3:45".
    ───────────────────────────────────────────────────────────────────────────── */
 
 const API = "http://127.0.0.1:8000";
 
-const TS_RE = /\[(\d{1,2}):(\d{2})\]/g;
-const FLEX_TS_RE = /(\d{1,2}):(\d{2})/g;
-const PARA_RE = /\[para(?:graph)?\s*(\d+)\]/gi;   // [para 3] or [paragraph 3]
+// Combined single-pass regex — order matters: para first, then bracketed [MM:SS]
+// Bare MM:SS (no brackets) is intentionally removed to avoid false positives.
+const COMBINED_RE =
+  /\[para(?:graph)?\s*(\d+)\]|\[(\d{1,2}):(\d{2})\]/gi;
 
-function renderAnswer(raw, sourceType) {
-  let html = raw;
+function renderAnswer(raw) {
+  // Escape any existing HTML so injected content is safe, then replace refs
+  // We work on plain text → produce HTML in one pass (no risk of double-replace).
+  const escaped = raw
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;");
 
-  // strict [MM:SS]
-  html = html.replace(TS_RE, (match, mm, ss) => {
+  return escaped.replace(COMBINED_RE, (match, paraNum, mm, ss) => {
+    if (paraNum !== undefined) {
+      // [para N] or [paragraph N]
+      return `<button class="ref-para" data-para="${paraNum}">[paragraph ${paraNum}]</button>`;
+    }
+    // [MM:SS]
     const sec = parseInt(mm, 10) * 60 + parseInt(ss, 10);
     return `<button class="ref-ts" data-time="${sec}">[${mm}:${ss}]</button>`;
   });
-
-  // fallback (MM:SS without brackets)
-  html = html.replace(FLEX_TS_RE, (match, mm, ss) => {
-    const sec = parseInt(mm, 10) * 60 + parseInt(ss, 10);
-    return `<button class="ref-ts" data-time="${sec}">[${mm}:${ss}]</button>`;
-  });
-
-  // paragraphs
-  html = html.replace(PARA_RE, (match, n) => {
-    return `<button class="ref-para" data-para="${n}">[paragraph ${n}]</button>`;
-  });
-
-  return html;
 }
+
 /* ─────────────────────────────────────────────────────────────────────────── */
 
 const AskQuestion = ({ videoData }) => {
   const videoId    = videoData?.videoId    || "";
   const sourceType = videoData?.sourceType || "youtube";
 
-  const [question, setQuestion] = useState("");
-  const [answerHtml, setAnswerHtml] = useState("");
-  const [status,   setStatus]   = useState("");
-  const [isLoading, setIsLoading] = useState(false);
-  const [error,    setError]    = useState("");
-  const answerRef  = useRef(null);
-
-  const [chat, setChat] = useState([]);
-const [currentAnswer, setCurrentAnswer] = useState("");
+  const [question,       setQuestion]       = useState("");
+  const [status,         setStatus]         = useState("");
+  const [isLoading,      setIsLoading]      = useState(false);
+  const [error,          setError]          = useState("");
+  const [chat,           setChat]           = useState([]);
+  const [currentAnswer,  setCurrentAnswer]  = useState("");
+  const answerRef = useRef(null);
 
   useEffect(() => {
     if (answerRef.current)
       answerRef.current.scrollTop = answerRef.current.scrollHeight;
-  }, [answerHtml]);
+  }, [currentAnswer, chat]);
 
   /* ── Ask ──────────────────────────────────────────────────────────────── */
   const handleAsk = async () => {
     if (!question.trim()) { setError("Please enter a question."); return; }
 
-    setAnswerHtml(""); setError(""); setIsLoading(true);
+    setCurrentAnswer(""); setError(""); setIsLoading(true);
     setStatus("Analyzing content…");
 
     try {
@@ -75,10 +70,10 @@ const [currentAnswer, setCurrentAnswer] = useState("");
         method:  "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-  video_id: videoId,
-  question,
-  history: chat,
-}),
+          video_id: videoId,
+          question,
+          history: chat,
+        }),
       });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
 
@@ -88,6 +83,7 @@ const [currentAnswer, setCurrentAnswer] = useState("");
       const decoder = new TextDecoder("utf-8");
       let buf = "";
       let rawAnswer = "";
+      const askedQuestion = question;
 
       while (true) {
         const { value, done } = await reader.read();
@@ -115,9 +111,8 @@ const [currentAnswer, setCurrentAnswer] = useState("");
             case "end":
               setChat(prev => [
                 ...prev,
-                { question, answer: rawAnswer }
+                { question: askedQuestion, answer: rawAnswer },
               ]);
-
               setCurrentAnswer("");
               setQuestion("");
               setStatus("");
@@ -130,30 +125,25 @@ const [currentAnswer, setCurrentAnswer] = useState("");
       }
     } catch (err) {
       setError("Failed to connect to backend. Make sure the server is running.");
-      setIsLoading(false); setStatus("");
+      setIsLoading(false);
+      setStatus("");
     }
   };
 
   /* ── Reference click handler ─────────────────────────────────────────── */
   const handleAnswerClick = (e) => {
-    // Timestamp click
+    // Timestamp click → seek video / audio
     if (e.target.classList.contains("ref-ts")) {
       const sec = parseInt(e.target.dataset.time, 10);
-      if (sourceType === "youtube") {
-  window.dispatchEvent(
-    new CustomEvent("knowitfast:timestamp", {
-      detail: { seconds: sec, videoId },
-    })
-  );
-}else {
-        window.dispatchEvent(
-          new CustomEvent("knowitfast:timestamp", { detail: { seconds: sec, videoId } })
-        );
-      }
+      window.dispatchEvent(
+        new CustomEvent("knowitfast:timestamp", {
+          detail: { seconds: sec, videoId },
+        })
+      );
       return;
     }
 
-    // Paragraph click (DOCX)
+    // Paragraph click (DOCX) → scroll to paragraph
     if (e.target.classList.contains("ref-para")) {
       const para = parseInt(e.target.dataset.para, 10);
       window.dispatchEvent(
@@ -172,8 +162,8 @@ const [currentAnswer, setCurrentAnswer] = useState("");
       const blob = new Blob([await res.arrayBuffer()], {
         type: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
       });
-      const url  = URL.createObjectURL(blob);
-      const a    = document.createElement("a");
+      const url = URL.createObjectURL(blob);
+      const a   = document.createElement("a");
       a.href = url;
 
       const disposition = res.headers.get("Content-Disposition") || "";
@@ -189,8 +179,6 @@ const [currentAnswer, setCurrentAnswer] = useState("");
       setStatus("");
     }
   };
-
-  const refLabel = sourceType === "docx" ? "paragraph refs" : "timestamps";
 
   return (
     <div className="glass-card pad-lg">
@@ -222,7 +210,9 @@ const [currentAnswer, setCurrentAnswer] = useState("");
           }
           value={question}
           onChange={(e) => setQuestion(e.target.value)}
-          onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handleAsk(); } }}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handleAsk(); }
+          }}
           disabled={isLoading}
         />
       </div>
@@ -239,7 +229,7 @@ const [currentAnswer, setCurrentAnswer] = useState("");
         </button>
       </div>
 
-      {/* Status */}
+      {/* Status / Error */}
       {status && (
         <div className="status-box loading">
           <span className="spinner" /> <span>{status}</span>
@@ -249,36 +239,30 @@ const [currentAnswer, setCurrentAnswer] = useState("");
         <div className="status-box error">⚠️ <span>{error}</span></div>
       )}
 
-      {/* Answer */}
-      <div style={{ marginTop: 16 }}>
-  {chat.map((item, idx) => (
-    <div key={idx} className="answer-box" style={{ marginBottom: 12 }}>
-      <div style={{ fontWeight: 600, marginBottom: 6 }}>
-        Q: {item.question}
-      </div>
-      <div
-        className="answer-content"
-        dangerouslySetInnerHTML={{
-          __html: renderAnswer(item.answer, sourceType),
-        }}
-        onClick={handleAnswerClick}
-      />
-    </div>
-  ))}
+      {/* Answer history + streaming answer */}
+      <div ref={answerRef} style={{ marginTop: 16 }}>
+        {chat.map((item, idx) => (
+          <div key={idx} className="answer-box" style={{ marginBottom: 12 }}>
+            <div style={{ fontWeight: 600, marginBottom: 6 }}>Q: {item.question}</div>
+            <div
+              className="answer-content"
+              dangerouslySetInnerHTML={{ __html: renderAnswer(item.answer) }}
+              onClick={handleAnswerClick}
+            />
+          </div>
+        ))}
 
-  {currentAnswer && (
-    <div className="answer-box">
-      <div style={{ fontWeight: 600 }}>Answer</div>
-      <div
-        className="answer-content"
-        dangerouslySetInnerHTML={{
-          __html: renderAnswer(currentAnswer, sourceType),
-        }}
-        onClick={handleAnswerClick}
-      />
-    </div>
-  )}
-</div>
+        {currentAnswer && (
+          <div className="answer-box">
+            <div style={{ fontWeight: 600 }}>Answer</div>
+            <div
+              className="answer-content"
+              dangerouslySetInnerHTML={{ __html: renderAnswer(currentAnswer) }}
+              onClick={handleAnswerClick}
+            />
+          </div>
+        )}
+      </div>
 
       {/* Inline styles for ref buttons */}
       <style>{`
