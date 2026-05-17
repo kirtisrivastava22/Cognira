@@ -9,80 +9,17 @@ import Quiz from "./Quiz";
    • Upload   → <video>  with direct currentTime seek
    ───────────────────────────────────────────────────────────────────────────── */
 const MediaPlayer = ({ videoData }) => {
-  const videoRef  = useRef(null);   // for <video>
-  const iframeRef = useRef(null);   // for YouTube <iframe>
-  // Track whether the YT player is ready to receive postMessage commands
-  const ytReady   = useRef(false);
-
-  /* ── YouTube IFrame API — listen for "onReady" so we can seek reliably ── */
-  useEffect(() => {
-    if (videoData?.sourceType !== "youtube") return;
-
-    const onMessage = (evt) => {
-      try {
-        const data = typeof evt.data === "string" ? JSON.parse(evt.data) : evt.data;
-        if (data?.event === "onReady") {
-          ytReady.current = true;
-        }
-      } catch (_) {}
-    };
-
-    window.addEventListener("message", onMessage);
-    return () => window.removeEventListener("message", onMessage);
-  }, [videoData?.sourceType]);
-
-  /* ── Timestamp navigation ─────────────────────────────────────────────── */
-  useEffect(() => {
-    const handler = (e) => {
-      const seconds = Number(e.detail?.seconds ?? 0);
-      if (isNaN(seconds)) return;
-
-      if (videoData?.sourceType === "youtube") {
-        // YouTube IFrame API: postMessage seekTo command
-        // Works even before onReady fires in most browsers (queued internally).
-        const iframe = iframeRef.current;
-        if (!iframe) return;
-        iframe.contentWindow?.postMessage(
-          JSON.stringify({
-            event: "command",
-            func: "seekTo",
-            args: [seconds, true],
-          }),
-          "*"
-        );
-        // Also send playVideo so it starts playing after seek
-        iframe.contentWindow?.postMessage(
-          JSON.stringify({ event: "command", func: "playVideo", args: [] }),
-          "*"
-        );
-      } else {
-        // Uploaded / direct video — plain HTML5 seek
-        const vid = videoRef.current;
-        if (!vid) return;
-        vid.currentTime = seconds;
-        vid.play().catch(() => {});  // play() may throw if autoplay blocked
-      }
-    };
-
-    window.addEventListener("knowitfast:timestamp", handler);
-    return () => window.removeEventListener("knowitfast:timestamp", handler);
-    // Re-register whenever sourceType changes so handler captures correct ref
-  }, [videoData?.sourceType]);
+  const mediaRef = useRef(null);
 
   if (!videoData) return null;
 
+  // YouTube
   if (videoData.sourceType === "youtube") {
     return (
       <iframe
-        ref={iframeRef}
         width="100%"
         height="400"
-        /*
-          enablejsapi=1  — enables postMessage IFrame API
-          origin         — required by YouTube for postMessage security
-          autoplay=0     — don't autoplay on load
-        */
-        src={`https://www.youtube.com/embed/${videoData.videoId}?enablejsapi=1&origin=${encodeURIComponent(window.location.origin)}&autoplay=0`}
+        src={`https://www.youtube.com/embed/${videoData.videoId}?enablejsapi=1`}
         allow="autoplay; encrypted-media"
         allowFullScreen
         title="YouTube player"
@@ -91,9 +28,42 @@ const MediaPlayer = ({ videoData }) => {
     );
   }
 
+  const mediaUrl = `http://127.0.0.1:8000/media/${videoData.videoId}`;
+
+  const title = videoData.title?.toLowerCase() || "";
+
+  const isAudio =
+    title.endsWith(".mp3") ||
+    title.endsWith(".wav") ||
+    title.endsWith(".m4a");
+
+  // AUDIO PLAYER
+  if (isAudio) {
+    return (
+      <audio
+        ref={mediaRef}
+        controls
+        style={{
+          width: "100%",
+          marginTop: 20,
+        }}
+      >
+        <source src={mediaUrl} />
+      </audio>
+    );
+  }
+
+  // VIDEO PLAYER
   return (
-    <video ref={videoRef} controls width="100%" style={{ borderRadius: 12 }}>
-      <source src={`http://127.0.0.1:8000/media/${videoData.videoId}`} />
+    <video
+      ref={mediaRef}
+      controls
+      width="100%"
+      style={{
+        borderRadius: 12,
+      }}
+    >
+      <source src={mediaUrl} />
     </video>
   );
 };
@@ -760,7 +730,7 @@ const VideoAnalysis = ({
           <span>KnowItFast analysis workspace</span>
         </div>
         <h1 className="hero-title">
-          <span className="gradient-text">Analyze, ask, and jump</span>
+          <span className="hero-title-text">Analyze, ask, and jump</span>
         </h1>
         <p className="hero-subtitle">
           Paste a YouTube URL, upload audio/video, or drop a Word document.

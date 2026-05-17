@@ -189,7 +189,7 @@ function App() {
               <div className="auth-modal" onClick={(e) => e.stopPropagation()}>
                 <div className="auth-modal-header">
                   <div>
-                    <div className="auth-badge">KnowItFast</div>
+                    <div className="auth-badge">Cognira</div>
                     <h2>Save your sessions across devices</h2>
                     <p>
                       Use the app freely without login, or sign in to sync your

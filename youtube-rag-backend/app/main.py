@@ -442,7 +442,29 @@ async def ingest_media(
         media_id=media_id, source_type=meta["source_type"],
         title=meta["title"], word_count=word_count, truncated=truncated,
     )
+import mimetypes
+from fastapi.responses import FileResponse
 
+
+@app.get("/media/{media_id}")
+def get_media(media_id: str):
+    meta = get_media_meta(media_id)
+
+    if not meta:
+        raise HTTPException(status_code=404, detail="Media not found")
+
+    local_path = meta.get("local_path")
+
+    if not local_path or not os.path.exists(local_path):
+        raise HTTPException(status_code=404, detail="File missing on disk")
+
+    mime_type, _ = mimetypes.guess_type(local_path)
+
+    return FileResponse(
+        path=local_path,
+        media_type=mime_type or "application/octet-stream",
+        filename=os.path.basename(local_path),
+    )
 
 @app.get("/doc/{media_id}")
 def get_doc(media_id: str):

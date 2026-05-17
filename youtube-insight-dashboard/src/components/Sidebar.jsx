@@ -8,8 +8,8 @@ const Sidebar = ({ isSignedIn, user, onOpenAuth, onSignOut }) => {
         <div className="side-brand">
           
           <div>
-            <p className="side-brand-title gradient-text">KnowItFast</p>
-            <p className="side-brand-subtitle">Skip the content. Keep the knowledge.</p>
+            <p className="side-brand-title">Cognira</p>
+            <p className="side-brand-subtitle">Turn content into clarity.</p>
           </div>
         </div>
 

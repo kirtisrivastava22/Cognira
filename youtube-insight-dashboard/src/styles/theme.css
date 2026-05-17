@@ -32,43 +32,29 @@ body {
   padding: 20px;
   transition: all 0.3s ease;
 }
-
 .glass-card:hover {
-  transform: translateY(-4px) scale(1.01);
-  box-shadow: 0 0 25px var(--glow-purple);
+  transform: translateY(-2px);
+  border-color: rgba(255, 255, 255, 0.18);
 }
 
 /* ✨ Buttons */
-.btn-primary {
-  background: linear-gradient(135deg, var(--accent-purple), var(--accent-cyan));
-  border: none;
-  border-radius: 10px;
-  padding: 12px;
-  color: white;
-  font-weight: 600;
-  cursor: pointer;
-  transition: 0.3s ease;
-}
-
-.btn-primary:hover {
-  opacity: 0.9;
-  box-shadow: 0 0 15px var(--glow-purple);
-}
-
+.btn-primary,
 .btn-secondary {
-  background: linear-gradient(135deg, var(--accent-cyan), var(--accent-purple));
-  border: none;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid var(--glass-border);
   border-radius: 10px;
   padding: 12px;
-  color: white;
-  font-weight: 600;
+  color: var(--text-primary);
+  font-weight: 500;
   cursor: pointer;
-  transition: 0.3s ease;
+  backdrop-filter: blur(10px);
+  transition: 0.2s ease;
 }
 
+.btn-primary:hover,
 .btn-secondary:hover {
   opacity: 0.9;
-  box-shadow: 0 0 15px var(--glow-cyan);
+  box-shadow: 0 0 15px var(--glow-purple);
 }
 
 /* 🧠 Inputs */
@@ -102,9 +88,7 @@ body {
 
 /* 🌈 Gradient Title */
 .gradient-text {
-  background: linear-gradient(to right, var(--accent-purple), var(--accent-cyan));
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
+  color: var(--text-primary);
 }
 
 /* 📦 List Items */

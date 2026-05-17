@@ -77,7 +77,6 @@ const History = ({ videoHistory, setCurrentVideo }) => {
 
       <div className="history-controls glass-card pad-lg">
         <div className="search-bar">
-          <span className="search-icon">🔍</span>
           <input
             type="text"
             className="input-field search-input"
@@ -87,7 +86,7 @@ const History = ({ videoHistory, setCurrentVideo }) => {
           />
         </div>
         {videoHistory.length > 0 && (
-          <button className="btn-secondary clear-btn" onClick={clearHistory}>
+          <button className="btn-secondary clear-btn margin-top-lg" onClick={clearHistory}>
             Clear History
           </button>
         )}

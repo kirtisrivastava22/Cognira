@@ -25,11 +25,13 @@ const Dashboard = ({
         </div>
 
         <h1 className="hero-title">
-          <span className="gradient-text">KnowItFast</span>
+          <span className="title">Cognira</span>
         </h1>
 
         <p className="hero-subtitle">
-          Skip the content. Keep the knowledge. Ask any video, audio, lecture, or upload for instant answers, summaries, chapters, quizzes, and exportable notes.
+          Turn content into clarity.
+          <br/>
+          Ask any video, audio, lecture, or upload for instant answers, summaries, chapters, quizzes, and exportable notes.
         </p>
 
         <div className="hero-actions">
