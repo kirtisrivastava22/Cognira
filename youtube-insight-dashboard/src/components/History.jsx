@@ -166,7 +166,7 @@ const VideoCard = ({ video, onClick }) => {
           />
         ) : (
           <div className="video-fallback">
-            {video.source_type === "upload" ? "📁" : "🎧"}
+            {video.source_type === "upload" ? "📁" : "📃"}
           </div>
         )}
 

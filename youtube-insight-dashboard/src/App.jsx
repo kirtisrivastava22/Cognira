@@ -4,6 +4,7 @@ import Dashboard from "./components/Dashboard";
 import VideoAnalysis from "./components/VideoAnalysis";
 import History from "./components/History";
 import Sidebar from "./components/Sidebar";
+import SharedConversation from "./components/SharedConversation";
 
 const API = import.meta.env.VITE_API_URL || "http://127.0.0.1:8000";
 
@@ -118,16 +119,26 @@ function App() {
       } catch {/* non-fatal */}
     }
   }, [user]);
+document.addEventListener('mousemove', (e) => {
+  const container = document.querySelector('.live-bg-container');
+  if (!container) return;
+  
+  // Calculate cursor position as a percentage of the viewport
+  const x = (e.clientX / window.innerWidth) * 100;
+  const y = (e.clientY / window.innerHeight) * 100;
+  
+  // Dynamically update CSS variables
+  container.style.setProperty('--mouse-x', `${x}%`);
+  container.style.setProperty('--mouse-y', `${y}%`);
+});
 
   return (
     <Router>
-      <div  className="app-root"
-  style={{ backgroundImage: "url('/bgg.png')",
-    backgroundSize: "cover",
-    backgroundPosition: "center",
-    backgroundRepeat: "no-repeat",
-    backgroundAttachment: "fixed", // ⭐ key line
-    minHeight: "100vh" }}>
+      <div  className="app-root">
+        <div class="live-bg-container">
+    <div class="bg-base-image"></div>
+    <div class="bg-ambient-glow"></div>
+  </div>
         <Sidebar
           user={user}
           onOpenAuth={() => setShowAuth(true)}
@@ -160,6 +171,7 @@ function App() {
                 user={user}
               />
             } />
+            <Route path="/shared/:id" element={<SharedConversation />} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
         </main>
