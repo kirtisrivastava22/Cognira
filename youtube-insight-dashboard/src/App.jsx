@@ -5,6 +5,7 @@ import VideoAnalysis from "./components/VideoAnalysis";
 import History from "./components/History";
 import Sidebar from "./components/Sidebar";
 import SharedConversation from "./components/SharedConversation";
+import { useConversations } from "./components/useConversations";
 
 const API = import.meta.env.VITE_API_URL || "http://127.0.0.1:8000";
 
@@ -119,31 +120,35 @@ function App() {
       } catch {/* non-fatal */}
     }
   }, [user]);
-document.addEventListener('mousemove', (e) => {
-  const container = document.querySelector('.live-bg-container');
-  if (!container) return;
-  
-  // Calculate cursor position as a percentage of the viewport
-  const x = (e.clientX / window.innerWidth) * 100;
-  const y = (e.clientY / window.innerHeight) * 100;
-  
-  // Dynamically update CSS variables
-  container.style.setProperty('--mouse-x', `${x}%`);
-  container.style.setProperty('--mouse-y', `${y}%`);
-});
-
+useEffect(() => {
+  const handler = (e) => {
+    const container = document.querySelector('.live-bg-container');
+    if (!container) return;
+    container.style.setProperty('--mouse-x', `${(e.clientX / window.innerWidth) * 100}%`);
+    container.style.setProperty('--mouse-y', `${(e.clientY / window.innerHeight) * 100}%`);
+  };
+  document.addEventListener('mousemove', handler);
+  return () => document.removeEventListener('mousemove', handler);
+}, []);
+const convs = useConversations(user, currentVideo?.videoId);
   return (
     <Router>
       <div  className="app-root">
-        <div class="live-bg-container">
-    <div class="bg-base-image"></div>
-    <div class="bg-ambient-glow"></div>
-  </div>
+        <div className="live-bg-container">
+  <div className="bg-base-image"></div>
+  <div className="bg-ambient-glow"></div>
+</div>
         <Sidebar
-          user={user}
-          onOpenAuth={() => setShowAuth(true)}
-          onSignOut={handleSignOut}
-        />
+  user={user}
+  onOpenAuth={() => setShowAuth(true)}
+  onSignOut={handleSignOut}
+  activeConvId={convs.activeConvId}
+  conversations={convs.list}
+  onSelectConv={convs.select}
+  onConvRenamed={convs.update}
+  onConvDeleted={convs.remove}
+  onConvPinned={convs.update}
+/>
 
         <main className="main-content">
           <Routes>
@@ -157,12 +162,15 @@ document.addEventListener('mousemove', (e) => {
             } />
             <Route path="/analyze" element={
               <VideoAnalysis
-                currentVideo={currentVideo}
-                setCurrentVideo={setCurrentVideo}
-                addToHistory={addToHistory}
-                user={user}
-                onOpenAuth={() => setShowAuth(true)}
-              />
+  currentVideo={currentVideo}
+  setCurrentVideo={setCurrentVideo}
+  addToHistory={addToHistory}
+  user={user}
+  onOpenAuth={() => setShowAuth(true)}
+  convId={convs.activeConvId}
+  onConvCreated={convs.add}
+  onConvUpdated={convs.update}
+/>
             } />
             <Route path="/history" element={
               <History
@@ -171,7 +179,7 @@ document.addEventListener('mousemove', (e) => {
                 user={user}
               />
             } />
-            <Route path="/shared/:id" element={<SharedConversation />} />
+            <Route path="/shared/:token" element={<SharedConversation />} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
         </main>

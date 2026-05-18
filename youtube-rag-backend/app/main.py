@@ -58,7 +58,12 @@ from app.media_manager import (
 from app.transcript_service import load_media_docs
 from app.vectorstore import get_or_create_vectorstore
 from app.docx_reader import load_docx_docs, WordLimitExceeded
-
+from app.database import (
+          create_conversation, get_conversation, get_conversation_by_token,
+          list_conversations, append_messages, rename_conversation,
+          pin_conversation, delete_conversation,
+          generate_share_token, revoke_share_token,
+      )
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Logging
@@ -394,7 +399,110 @@ async def ask_stream(req: AskRequest):
         },
     )
 
+class ConvCreateRequest(BaseModel):
+    user_id:  str
+    media_id: str
+    title:    str = "New conversation"
 
+
+class ConvAppendRequest(BaseModel):
+    conv_id:  str
+    messages: list[dict]          # [{question, answer}, ...]
+
+
+class ConvRenameRequest(BaseModel):
+    title: str
+
+
+class ConvPinRequest(BaseModel):
+    pinned: bool
+
+
+# ── Routes ─────────────────────────────────────────────────────────────────
+
+@app.post("/conversations", tags=["conversations"])
+def conv_create(req: ConvCreateRequest):
+    """Create a new empty conversation."""
+    conv = create_conversation(req.user_id, req.media_id, req.title)
+    return conv
+
+
+@app.get("/conversations/{user_id}", tags=["conversations"])
+def conv_list(user_id: str, media_id: str | None = None):
+    """List all conversations for a user (optionally filtered by media_id)."""
+    return {"conversations": list_conversations(user_id, media_id)}
+
+
+@app.get("/conversation/{conv_id}", tags=["conversations"])
+def conv_get(conv_id: str):
+    """Get a single conversation by ID."""
+    conv = get_conversation(conv_id)
+    if not conv:
+        raise HTTPException(status_code=404, detail="Conversation not found")
+    return conv
+
+
+@app.post("/conversations/{conv_id}/messages", tags=["conversations"])
+def conv_append(conv_id: str, req: ConvAppendRequest):
+    """Append Q&A turns to a conversation (call after each answer)."""
+    conv = append_messages(conv_id, req.messages)
+    if not conv:
+        raise HTTPException(status_code=404, detail="Conversation not found")
+    return conv
+
+
+@app.patch("/conversations/{conv_id}/rename", tags=["conversations"])
+def conv_rename(conv_id: str, req: ConvRenameRequest):
+    conv = rename_conversation(conv_id, req.title)
+    if not conv:
+        raise HTTPException(status_code=404, detail="Conversation not found")
+    return conv
+
+
+@app.patch("/conversations/{conv_id}/pin", tags=["conversations"])
+def conv_pin(conv_id: str, req: ConvPinRequest):
+    conv = pin_conversation(conv_id, req.pinned)
+    if not conv:
+        raise HTTPException(status_code=404, detail="Conversation not found")
+    return conv
+
+
+@app.delete("/conversations/{conv_id}", tags=["conversations"])
+def conv_delete(conv_id: str):
+    ok = delete_conversation(conv_id)
+    if not ok:
+        raise HTTPException(status_code=404, detail="Conversation not found")
+    return {"ok": True}
+
+
+@app.post("/conversations/{conv_id}/share", tags=["conversations"])
+def conv_share(conv_id: str):
+    """Generate a public share token for this conversation."""
+    token = generate_share_token(conv_id)
+    if token is None:
+        raise HTTPException(status_code=404, detail="Conversation not found")
+    share_url = f"/shared/{token}"
+    return {"share_token": token, "share_url": share_url}
+
+
+@app.delete("/conversations/{conv_id}/share", tags=["conversations"])
+def conv_unshare(conv_id: str):
+    """Revoke the share token."""
+    ok = revoke_share_token(conv_id)
+    if not ok:
+        raise HTTPException(status_code=404, detail="Conversation not found")
+    return {"ok": True}
+
+
+@app.get("/shared/{share_token}", tags=["conversations"])
+def conv_shared_view(share_token: str):
+    """Public endpoint — fetch shared conversation by token."""
+    conv = get_conversation_by_token(share_token)
+    if not conv:
+        raise HTTPException(status_code=404, detail="Shared conversation not found or link revoked")
+    # Strip private fields before returning
+    conv.pop("user_id", None)
+    return conv
 # ─────────────────────────────────────────────────────────────────────────────
 # Ingest
 # ─────────────────────────────────────────────────────────────────────────────

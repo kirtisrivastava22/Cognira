@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from "react";
+import React, { useState, useRef, useEffect, useCallback } from "react";
 
 const API = import.meta.env.VITE_API_URL || "http://127.0.0.1:8000";
 
@@ -16,7 +16,23 @@ function renderAnswer(raw) {
   });
 }
 
-export default function AskQuestion({ videoData }) {
+/**
+ * AskQuestion — upgraded with persistent conversations.
+ *
+ * Props:
+ *   videoData      – { videoId, sourceType, title }
+ *   user           – { user_id, name } | null
+ *   convId         – active conversation ID (controlled by parent)
+ *   onConvCreated  – (conv) => void  — called when a new conv is created
+ *   onConvUpdated  – (conv) => void  — called after each answer is saved
+ */
+export default function AskQuestion({
+  videoData,
+  user,
+  convId,
+  onConvCreated,
+  onConvUpdated,
+}) {
   const videoId    = videoData?.videoId    || "";
   const sourceType = videoData?.sourceType || "youtube";
 
@@ -26,16 +42,95 @@ export default function AskQuestion({ videoData }) {
   const [error,         setError]         = useState("");
   const [chat,          setChat]          = useState([]);
   const [currentAnswer, setCurrentAnswer] = useState("");
+  const [activeConvId,  setActiveConvId]  = useState(convId || null);
+  const [shareUrl,      setShareUrl]      = useState(null);
+  const [shareCopied,   setShareCopied]   = useState(false);
   const bottomRef = useRef(null);
+
+  // When parent switches conversation, reload it
+  useEffect(() => {
+    if (convId && convId !== activeConvId) {
+      setActiveConvId(convId);
+      loadConversation(convId);
+    }
+  }, [convId]);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [currentAnswer, chat]);
 
+  // ── Load existing conversation from server ────────────────────────────────
+  const loadConversation = async (id) => {
+    try {
+      const res = await fetch(`${API}/conversation/${id}`);
+      if (!res.ok) return;
+      const data = await res.json();
+      setChat(data.messages || []);
+      if (data.share_token) {
+        setShareUrl(`${window.location.origin}/shared/${data.share_token}`);
+      } else {
+        setShareUrl(null);
+      }
+    } catch {
+      // ignore
+    }
+  };
+
+  // ── Ensure a conversation exists before first message ────────────────────
+  const ensureConversation = async () => {
+    if (activeConvId) return activeConvId;
+
+    // Guest mode: use local-only conversation ID
+    if (!user) {
+      const tempId = `local_${Date.now()}`;
+      setActiveConvId(tempId);
+      return tempId;
+    }
+
+    try {
+      const res = await fetch(`${API}/conversations`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          user_id:  user.user_id,
+          media_id: videoId,
+          title:    "New conversation",
+        }),
+      });
+      const conv = await res.json();
+      setActiveConvId(conv.conv_id);
+      onConvCreated?.(conv);
+      return conv.conv_id;
+    } catch {
+      return null;
+    }
+  };
+
+  // ── Persist messages to server after each answer ─────────────────────────
+  const persistMessages = async (cid, newMessages) => {
+    if (!user || !cid || cid.startsWith("local_")) return;
+    try {
+      const res = await fetch(`${API}/conversations/${cid}/messages`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ conv_id: cid, messages: newMessages }),
+      });
+      if (res.ok) {
+        const conv = await res.json();
+        onConvUpdated?.(conv);
+      }
+    } catch {
+      // silent — chat still works locally
+    }
+  };
+
+  // ── Ask ───────────────────────────────────────────────────────────────────
   const handleAsk = async () => {
     if (!question.trim()) { setError("Enter a question."); return; }
     setCurrentAnswer(""); setError(""); setIsLoading(true);
     setStatus("Searching content…");
+
+    const cid = await ensureConversation();
 
     try {
       const res = await fetch(`${API}/ask_stream`, {
@@ -61,10 +156,15 @@ export default function AskQuestion({ videoData }) {
           if (!ev.startsWith("data: ")) continue;
           const payload = JSON.parse(ev.slice(6));
           if (payload.type === "status")     setStatus(payload.value);
-          if (payload.type === "token")     { rawAnswer += payload.value; setCurrentAnswer(rawAnswer); }
-          if (payload.type === "correction") { rawAnswer = payload.value; setCurrentAnswer(rawAnswer); }
+          if (payload.type === "token")      { rawAnswer += payload.value; setCurrentAnswer(rawAnswer); }
+          if (payload.type === "correction") { rawAnswer = payload.value;  setCurrentAnswer(rawAnswer); }
           if (payload.type === "end") {
-            setChat(prev => [...prev, { question: askedQ, answer: rawAnswer }]);
+            const newTurn = { question: askedQ, answer: rawAnswer };
+            setChat(prev => {
+              const updated = [...prev, newTurn];
+              persistMessages(cid, [newTurn]);
+              return updated;
+            });
             setCurrentAnswer(""); setQuestion(""); setStatus(""); setIsLoading(false);
           }
         }
@@ -75,6 +175,7 @@ export default function AskQuestion({ videoData }) {
     }
   };
 
+  // ── Reference clicks ──────────────────────────────────────────────────────
   const handleRefClick = (e) => {
     if (e.target.classList.contains("ref-ts")) {
       const sec = parseInt(e.target.dataset.time, 10);
@@ -86,6 +187,7 @@ export default function AskQuestion({ videoData }) {
     }
   };
 
+  // ── Export ────────────────────────────────────────────────────────────────
   const handleExport = async () => {
     setStatus("Generating notes…");
     try {
@@ -105,6 +207,69 @@ export default function AskQuestion({ videoData }) {
     finally  { setStatus(""); }
   };
 
+  // ── Share ─────────────────────────────────────────────────────────────────
+  const handleShare = async () => {
+    console.log("user in AskQuestion:", user);
+  if (!user) {
+    setError("Sign in to share conversations.");
+    return;
+  }
+
+  try {
+    // If no server conversation yet, create one and save current chat first
+    let cid = activeConvId;
+
+    if (!cid || cid.startsWith("local_")) {
+      const res = await fetch(`${API}/conversations`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          user_id:  user.user_id,
+          media_id: videoId,
+          title:    chat[0]?.question || "Shared conversation",
+        }),
+      });
+      const conv = await res.json();
+      cid = conv.conv_id;
+      setActiveConvId(cid);
+      onConvCreated?.(conv);
+
+      // Save all existing messages
+      await fetch(`${API}/conversations/${cid}/messages`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ conv_id: cid, messages: chat }),
+      });
+    }
+
+    const res = await fetch(`${API}/conversations/${cid}/share`, { method: "POST" });
+    const data = await res.json();
+    const url = `${window.location.origin}/shared/${data.share_token}`;
+    setShareUrl(url);
+    await navigator.clipboard.writeText(url);
+    setShareCopied(true);
+    setTimeout(() => setShareCopied(false), 2500);
+
+  } catch { 
+    setError("Could not generate share link."); 
+  }
+};
+
+  const handleUnshare = async () => {
+    if (!activeConvId) return;
+    try {
+      await fetch(`${API}/conversations/${activeConvId}/share`, { method: "DELETE" });
+      setShareUrl(null);
+    } catch { setError("Could not revoke link."); }
+  };
+
+  const handleClearChat = async () => {
+    setChat([]);
+    setActiveConvId(null);
+    setShareUrl(null);
+    onConvCreated?.(null);
+  };
+
   return (
     <div>
       {/* Source indicator */}
@@ -112,7 +277,31 @@ export default function AskQuestion({ videoData }) {
         <span className={`tag ${sourceType === "docx" ? "tag-teal" : "tag-accent"}`}>
           {sourceType === "docx" ? "Document · paragraph refs" : sourceType === "youtube" ? "YouTube · timestamps" : "Upload · timestamps"}
         </span>
+        {activeConvId && !activeConvId.startsWith("local_") && (
+          <span className="tag" style={{ background: "var(--bg-elevated)", color: "var(--text-secondary)", fontSize: 11 }}>
+            ● Saved
+          </span>
+        )}
       </div>
+
+      {/* Share banner */}
+      {shareUrl && (
+        <div className="status-box" style={{
+          background: "var(--bg-elevated)", border: "1px solid var(--accent-border)",
+          borderRadius: "var(--radius)", padding: "10px 14px", marginBottom: 12,
+          display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap",
+        }}>
+          <span style={{ fontSize: 13, color: "var(--text-secondary)", flex: 1, wordBreak: "break-all" }}>
+            🔗 {shareUrl}
+          </span>
+          <button className="btn btn-ghost btn-sm" onClick={() => { navigator.clipboard.writeText(shareUrl); setShareCopied(true); setTimeout(() => setShareCopied(false), 2000); }}>
+            {shareCopied ? "✓ Copied" : "Copy"}
+          </button>
+          <button className="btn btn-ghost btn-sm" style={{ color: "var(--text-tertiary)" }} onClick={handleUnshare}>
+            Revoke
+          </button>
+        </div>
+      )}
 
       {/* Chat history */}
       {chat.map((item, idx) => (
@@ -144,7 +333,7 @@ export default function AskQuestion({ videoData }) {
         />
       </div>
 
-      <div className="flex gap-8 mt-12">
+      <div className="flex gap-8 mt-12" style={{ flexWrap: "wrap" }}>
         <button className="btn btn-primary" onClick={handleAsk} disabled={isLoading}>
           {isLoading ? <><span className="spinner" /> Analyzing</> : "Ask"}
         </button>
@@ -152,7 +341,12 @@ export default function AskQuestion({ videoData }) {
           ↓ Export notes
         </button>
         {chat.length > 0 && (
-          <button className="btn btn-ghost" onClick={() => setChat([])}>Clear</button>
+          <>
+            <button className="btn btn-ghost" onClick={handleShare} disabled={isLoading}>
+              🔗 Share
+            </button>
+            <button className="btn btn-ghost" onClick={handleClearChat}>New chat</button>
+          </>
         )}
       </div>
 

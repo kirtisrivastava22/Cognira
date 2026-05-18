@@ -277,7 +277,7 @@ function DocxViewer({ mediaId }) {
 }
 
 /* ── Main VideoAnalysis ───────────────────────────────────────── */
-export default function VideoAnalysis({ currentVideo, setCurrentVideo, addToHistory, user, onOpenAuth }) {
+export default function VideoAnalysis({ currentVideo, setCurrentVideo, addToHistory, user, onOpenAuth, convId, onConvCreated, onConvUpdated })  {
   const [activeTab,  setActiveTab]  = useState("ask");
   const [inputMode,  setInputMode]  = useState("youtube");
   const [videoUrl,   setVideoUrl]   = useState("");
@@ -517,7 +517,13 @@ export default function VideoAnalysis({ currentVideo, setCurrentVideo, addToHist
                 </button>
               ))}
             </div>
-            {activeTab === "ask"      && <AskQuestion videoData={videoData} />}
+            {activeTab === "ask"      && <AskQuestion
+  videoData={videoData}
+  user={user}             
+  convId={convId}
+  onConvCreated={onConvCreated}
+  onConvUpdated={onConvUpdated}
+ />}
             {activeTab === "chapters" && <Chapters    videoData={videoData} />}
             {activeTab === "quiz"     && <Quiz        videoData={videoData} />}
           </div>

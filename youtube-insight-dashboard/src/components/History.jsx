@@ -79,7 +79,7 @@ const History = ({ videoHistory, setCurrentVideo }) => {
       <div className="glass-card pad-lg history-header">
         <div>
           <h1 className="hero-title">Your Sessions</h1>
-          <p className="hero-subtitle">
+          <p className="hero-subtitle mt-12">
             Search and revisit your analyzed videos, audio, and uploads.
           </p>
         </div>
@@ -98,7 +98,7 @@ const History = ({ videoHistory, setCurrentVideo }) => {
         </div>
 
         {videoHistory.length > 0 && (
-          <button className="btn-secondary clear-btn" onClick={clearHistory}>
+          <button className="btn-primary btn btn-lg" onClick={clearHistory}>
             Clear History
           </button>
         )}
