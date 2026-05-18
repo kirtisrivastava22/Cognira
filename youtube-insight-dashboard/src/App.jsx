@@ -1,262 +1,231 @@
-import React, { useState, useEffect, useMemo } from "react";
-import {
-  BrowserRouter as Router,
-  Routes,
-  Route,
-  Navigate,
-} from "react-router-dom";
+import React, { useState, useEffect, useCallback } from "react";
+import { BrowserRouter as Router, Routes, Route, Navigate } from "react-router-dom";
 import Dashboard from "./components/Dashboard";
 import VideoAnalysis from "./components/VideoAnalysis";
 import History from "./components/History";
-import Settings from "./components/Settings";
 import Sidebar from "./components/Sidebar";
-import "./App.css";
+
+const API = import.meta.env.VITE_API_URL || "http://127.0.0.1:8000";
 
 function App() {
+  const [user, setUser]               = useState(null);      // {user_id, name, email}
   const [videoHistory, setVideoHistory] = useState([]);
   const [currentVideo, setCurrentVideo] = useState(null);
+  const [showAuth, setShowAuth]         = useState(false);
+  const [historyLoaded, setHistoryLoaded] = useState(false);
 
-  const [isSignedIn, setIsSignedIn] = useState(false);
-  const [user, setUser] = useState(null);
-  const [showAuthModal, setShowAuthModal] = useState(false);
-
-  const historyKey = useMemo(() => {
-    if (isSignedIn && user?.id) return `knowitfast_history_${user.id}`;
-    return "knowitfast_history_guest";
-  }, [isSignedIn, user]);
-
+  // ── Restore auth from localStorage ──────────────────────────────────────
   useEffect(() => {
-    const savedAuth = localStorage.getItem("knowitfast_auth");
-    if (savedAuth) {
+    const saved = localStorage.getItem("cognira_user");
+    if (saved) {
       try {
-        const parsed = JSON.parse(savedAuth);
-        setIsSignedIn(Boolean(parsed?.isSignedIn));
-        setUser(parsed?.user || null);
+        const u = JSON.parse(saved);
+        setUser(u);
       } catch {
-        localStorage.removeItem("knowitfast_auth");
+        localStorage.removeItem("cognira_user");
       }
     }
   }, []);
 
+  // ── Load history (server if signed in, localStorage if guest) ───────────
   useEffect(() => {
-    const savedHistory = localStorage.getItem(historyKey);
-    if (savedHistory) {
-      try {
-        setVideoHistory(JSON.parse(savedHistory));
-      } catch {
-        setVideoHistory([]);
+    const loadHistory = async () => {
+      if (user?.user_id) {
+        try {
+          const res  = await fetch(`${API}/history/${user.user_id}`);
+          const data = await res.json();
+          setVideoHistory(data.history || []);
+        } catch {
+          // Fallback to local
+          const local = localStorage.getItem("cognira_history_guest");
+          setVideoHistory(local ? JSON.parse(local) : []);
+        }
+      } else {
+        const local = localStorage.getItem("cognira_history_guest");
+        setVideoHistory(local ? JSON.parse(local) : []);
       }
-    } else {
-      setVideoHistory([]);
+      setHistoryLoaded(true);
+    };
+    loadHistory();
+  }, [user]);
+
+  // ── Sign in ─────────────────────────────────────────────────────────────
+  const handleSignIn = useCallback(async (name, email) => {
+    try {
+      const res  = await fetch(`${API}/auth/signin`, {
+        method:  "POST",
+        headers: { "Content-Type": "application/json" },
+        body:    JSON.stringify({ name, email }),
+      });
+      if (!res.ok) throw new Error("Auth failed");
+      const u = await res.json();
+      setUser(u);
+      localStorage.setItem("cognira_user", JSON.stringify(u));
+      setShowAuth(false);
+      // Reload history from server
+      const hr  = await fetch(`${API}/history/${u.user_id}`);
+      const hd  = await hr.json();
+      setVideoHistory(hd.history || []);
+    } catch {
+      // Graceful degradation: store locally
+      const userId = btoa(`${email}:${name}`).replace(/=/g, "").slice(0, 32);
+      const u = { user_id: userId, name, email };
+      setUser(u);
+      localStorage.setItem("cognira_user", JSON.stringify(u));
+      setShowAuth(false);
     }
-  }, [historyKey]);
+  }, []);
 
-  const persistAuth = (nextIsSignedIn, nextUser) => {
-    setIsSignedIn(nextIsSignedIn);
-    setUser(nextUser);
-
-    localStorage.setItem(
-      "knowitfast_auth",
-      JSON.stringify({
-        isSignedIn: nextIsSignedIn,
-        user: nextUser,
-      }),
-    );
-  };
-
-  const handleSignIn = (name, email) => {
-    const safeName = name?.trim() || "KnowItFast User";
-    const safeEmail = email?.trim() || "guest@knowitfast.app";
-
-    const userId =
-      safeEmail.toLowerCase().replace(/[^a-z0-9]/g, "_") +
-      "_" +
-      safeName.toLowerCase().replace(/[^a-z0-9]/g, "_");
-
-    persistAuth(true, {
-      id: userId,
-      name: safeName,
-      email: safeEmail,
-    });
-
-    setShowAuthModal(false);
-  };
-
-  const handleContinueAsGuest = () => {
-    persistAuth(false, null);
-    setShowAuthModal(false);
-  };
-
-  const handleSignOut = () => {
-    persistAuth(false, null);
+  const handleSignOut = useCallback(() => {
+    setUser(null);
     setVideoHistory([]);
     setCurrentVideo(null);
-    localStorage.removeItem("knowitfast_auth");
-    setShowAuthModal(false);
-  };
+    localStorage.removeItem("cognira_user");
+    setShowAuth(false);
+  }, []);
 
-  const addToHistory = (video) => {
-    const newHistory = [
-      video,
-      ...videoHistory.filter((v) => v.videoId !== video.videoId),
-    ].slice(0, 50);
+  // ── Add to history (server + local) ─────────────────────────────────────
+  const addToHistory = useCallback(async (video) => {
+    const entry = {
+      media_id:    video.videoId,
+      title:       video.title,
+      source_type: video.sourceType || "youtube",
+      viewed_at:   new Date().toISOString(),
+    };
 
-    setVideoHistory(newHistory);
-    localStorage.setItem(historyKey, JSON.stringify(newHistory));
-  };
+    // Optimistic local update
+    setVideoHistory(prev => {
+      const next = [entry, ...prev.filter(v => v.media_id !== entry.media_id)].slice(0, 50);
+      if (!user?.user_id) {
+        localStorage.setItem("cognira_history_guest", JSON.stringify(next));
+      }
+      return next;
+    });
+
+    // Persist server-side if signed in
+    if (user?.user_id) {
+      try {
+        await fetch(`${API}/history`, {
+          method:  "POST",
+          headers: { "Content-Type": "application/json" },
+          body:    JSON.stringify({
+            user_id:    user.user_id,
+            media_id:   video.videoId,
+            title:      video.title,
+            source_type: video.sourceType || "youtube",
+          }),
+        });
+      } catch {/* non-fatal */}
+    }
+  }, [user]);
 
   return (
     <Router>
-      <div
-        className={`knowitfast-app ${isSignedIn ? "signed-in" : "guest-mode"}`}
-        style={{ backgroundImage: "url('/KnowItFastHeroBg2.png')" }}
-      >
-        <div className="knowitfast-overlay" />
-        <div className="app-shell">
-          <Sidebar
-            isSignedIn={isSignedIn}
-            user={user}
-            onOpenAuth={() => setShowAuthModal(true)}
-            onSignOut={handleSignOut}
+      <div  className="app-root"
+  style={{ backgroundImage: "url('/bgg.png')",
+    backgroundSize: "cover",
+    backgroundPosition: "center",
+    backgroundRepeat: "no-repeat",
+    backgroundAttachment: "fixed", // ⭐ key line
+    minHeight: "100vh" }}>
+        <Sidebar
+          user={user}
+          onOpenAuth={() => setShowAuth(true)}
+          onSignOut={handleSignOut}
+        />
+
+        <main className="main-content">
+          <Routes>
+            <Route path="/" element={
+              <Dashboard
+                videoHistory={videoHistory}
+                setCurrentVideo={setCurrentVideo}
+                user={user}
+                onOpenAuth={() => setShowAuth(true)}
+              />
+            } />
+            <Route path="/analyze" element={
+              <VideoAnalysis
+                currentVideo={currentVideo}
+                setCurrentVideo={setCurrentVideo}
+                addToHistory={addToHistory}
+                user={user}
+                onOpenAuth={() => setShowAuth(true)}
+              />
+            } />
+            <Route path="/history" element={
+              <History
+                videoHistory={videoHistory}
+                setCurrentVideo={setCurrentVideo}
+                user={user}
+              />
+            } />
+            <Route path="*" element={<Navigate to="/" replace />} />
+          </Routes>
+        </main>
+
+        {showAuth && (
+          <AuthModal
+            onSignIn={handleSignIn}
+            onClose={() => setShowAuth(false)}
           />
-
-          <main className="main-content">
-            <div className="page-wrap">
-              <Routes>
-                <Route
-                  path="/"
-                  element={
-                    <Dashboard
-                      videoHistory={videoHistory}
-                      setCurrentVideo={setCurrentVideo}
-                      isSignedIn={isSignedIn}
-                      user={user}
-                      onOpenAuth={() => setShowAuthModal(true)}
-                      onContinueAsGuest={handleContinueAsGuest}
-                    />
-                  }
-                />
-
-                <Route
-                  path="/analyze"
-                  element={
-                    <VideoAnalysis
-                      currentVideo={currentVideo}
-                      setCurrentVideo={setCurrentVideo}
-                      addToHistory={addToHistory}
-                      isSignedIn={isSignedIn}
-                      user={user}
-                      onOpenAuth={() => setShowAuthModal(true)}
-                    />
-                  }
-                />
-
-                <Route
-                  path="/history"
-                  element={
-                    <History
-                      videoHistory={videoHistory}
-                      setCurrentVideo={setCurrentVideo}
-                      isSignedIn={isSignedIn}
-                      user={user}
-                      onOpenAuth={() => setShowAuthModal(true)}
-                    />
-                  }
-                />
-
-                <Route
-                  path="/settings"
-                  element={
-                    <Settings
-                      isSignedIn={isSignedIn}
-                      user={user}
-                      onOpenAuth={() => setShowAuthModal(true)}
-                      onSignOut={handleSignOut}
-                    />
-                  }
-                />
-
-                <Route path="*" element={<Navigate to="/" replace />} />
-              </Routes>
-            </div>
-          </main>
-
-          {showAuthModal && (
-            <div
-              className="auth-modal-backdrop"
-              onClick={() => setShowAuthModal(false)}
-            >
-              <div className="auth-modal" onClick={(e) => e.stopPropagation()}>
-                <div className="auth-modal-header">
-                  <div>
-                    <div className="auth-badge">Cognira</div>
-                    <h2>Save your sessions across devices</h2>
-                    <p>
-                      Use the app freely without login, or sign in to sync your
-                      history.
-                    </p>
-                  </div>
-                  <button
-                    className="icon-btn"
-                    onClick={() => setShowAuthModal(false)}
-                    aria-label="Close"
-                  >
-                    ✕
-                  </button>
-                </div>
-
-                <AuthForm
-                  onSignIn={handleSignIn}
-                  onContinueAsGuest={handleContinueAsGuest}
-                />
-              </div>
-            </div>
-          )}
-        </div>
+        )}
       </div>
     </Router>
   );
 }
 
-function AuthForm({ onSignIn, onContinueAsGuest }) {
-  const [name, setName] = useState("");
+function AuthModal({ onSignIn, onClose }) {
+  const [name,  setName]  = useState("");
   const [email, setEmail] = useState("");
+  const [busy,  setBusy]  = useState(false);
+
+  const submit = async () => {
+    if (!name.trim() || !email.trim()) return;
+    setBusy(true);
+    await onSignIn(name.trim(), email.trim());
+    setBusy(false);
+  };
 
   return (
-    <div className="auth-form">
-      <label className="auth-label">
-        Name
-        <input
-          className="auth-input"
-          value={name}
-          onChange={(e) => setName(e.target.value)}
-          placeholder="Your name"
-        />
-      </label>
+    <div className="modal-backdrop" onClick={onClose}>
+      <div className="modal" onClick={e => e.stopPropagation()}>
+        <button className="modal-close" onClick={onClose}>✕</button>
+        <div className="modal-brand">Cognira</div>
+        <h2 className="modal-title">Save your sessions</h2>
+        <p className="modal-sub">Sign in once to sync history across all your devices.</p>
 
-      <label className="auth-label">
-        Email
-        <input
-          className="auth-input"
-          value={email}
-          onChange={(e) => setEmail(e.target.value)}
-          placeholder="you@example.com"
-        />
-      </label>
+        <div className="auth-fields">
+          <div className="field-group">
+            <label>Name</label>
+            <input
+              value={name}
+              onChange={e => setName(e.target.value)}
+              placeholder="Your name"
+              onKeyDown={e => e.key === "Enter" && submit()}
+            />
+          </div>
+          <div className="field-group">
+            <label>Email</label>
+            <input
+              type="email"
+              value={email}
+              onChange={e => setEmail(e.target.value)}
+              placeholder="you@example.com"
+              onKeyDown={e => e.key === "Enter" && submit()}
+            />
+          </div>
+        </div>
 
-      <div className="auth-actions">
         <button
-          className="btn-primary auth-primary"
-          onClick={() => onSignIn(name, email)}
+          className="btn-auth-primary"
+          onClick={submit}
+          disabled={busy || !name.trim() || !email.trim()}
         >
-          Sign in & Save History
+          {busy ? "Signing in…" : "Sign in & sync history"}
         </button>
-
-        <button
-          className="btn-secondary auth-secondary"
-          onClick={onContinueAsGuest}
-        >
-          Continue as Guest
+        <button className="btn-auth-ghost" onClick={onClose}>
+          Continue without account
         </button>
       </div>
     </div>

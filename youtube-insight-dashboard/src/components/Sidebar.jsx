@@ -1,81 +1,67 @@
 import React from "react";
 import { NavLink } from "react-router-dom";
 
-const Sidebar = ({ isSignedIn, user, onOpenAuth, onSignOut }) => {
+const NAV = [
+  { to: "/",        icon: "⬡",  label: "Home" },
+  { to: "/analyze", icon: "◈",  label: "Analyze" },
+  { to: "/history", icon: "◷",  label: "History" },
+];
+
+export default function Sidebar({ user, onOpenAuth, onSignOut }) {
   return (
-    <aside className="sidebar-shell">
-      <div className="sidebar-top">
-        <div className="side-brand">
-          
-          <div>
-            <p className="side-brand-title">Cognira</p>
-            <p className="side-brand-subtitle">Turn content into clarity.</p>
-          </div>
+    <aside className="sidebar">
+      <div className="sidebar-brand">
+        <div className="sidebar-logo">
+          <span className="sidebar-logo-dot" />
+          Cognira
         </div>
+        <div className="sidebar-tagline">Content intelligence</div>
+      </div>
 
-        <nav className="side-nav">
+      <nav className="sidebar-nav">
+        {NAV.map(({ to, icon, label }) => (
           <NavLink
-            to="/"
-            className={({ isActive }) => `nav-pill ${isActive ? "active" : ""}`}
+            key={to}
+            to={to}
+            end={to === "/"}
+            className={({ isActive }) => `nav-item${isActive ? " active" : ""}`}
           >
-            
-            <span>Dashboard</span>
+            <span className="nav-icon">{icon}</span>
+            {label}
           </NavLink>
+        ))}
+      </nav>
 
-          <NavLink
-            to="/analyze"
-            className={({ isActive }) => `nav-pill ${isActive ? "active" : ""}`}
-          >
-            
-            <span>Analyze</span>
-          </NavLink>
-
-          <NavLink
-            to="/history"
-            className={({ isActive }) => `nav-pill ${isActive ? "active" : ""}`}
-          >
-            
-            <span>History</span>
-          </NavLink>
-
-          <NavLink
-            to="/settings"
-            className={({ isActive }) => `nav-pill ${isActive ? "active" : ""}`}
-          >
-            
-            <span>Settings</span>
-          </NavLink>
-        </nav>
-
-        {isSignedIn ? (
-          <div className="glass-card side-profile-card">
-            <p className="side-profile-name">{user?.name || "Signed in"}</p>
-            <p className="side-profile-email">{user?.email || "Synced account"}</p>
-            <div style={{ height: 12 }} />
-            <button className="btn-secondary" onClick={onSignOut}>
+      <div className="sidebar-footer">
+        {user ? (
+          <>
+            <div className="sidebar-user">
+              <div className="user-avatar">
+                {user.name?.[0]?.toUpperCase() || "?"}
+              </div>
+              <div className="user-info">
+                <div className="user-name">{user.name}</div>
+                <div className="user-email">{user.email}</div>
+              </div>
+            </div>
+            <button
+              className="btn btn-ghost btn-sm"
+              style={{ width: "100%", justifyContent: "center" }}
+              onClick={onSignOut}
+            >
               Sign out
             </button>
-          </div>
+          </>
         ) : (
-          <div className="glass-card side-auth-card">
-            <p className="side-profile-name">Guest mode</p>
-            <p className="side-profile-email">
-              Use the app freely, or sign in to sync your history.
-            </p>
-            <div style={{ height: 12 }} />
-            <button className="btn-primary" onClick={onOpenAuth}>
-              Sign in
-            </button>
-          </div>
+          <button
+            className="btn btn-secondary btn-sm"
+            style={{ width: "100%", justifyContent: "center" }}
+            onClick={onOpenAuth}
+          >
+            Sign in
+          </button>
         )}
       </div>
-
-      <div className="side-footer">
-        <div>Built for videos, audio, lectures, and uploads.</div>
-      </div>
-      
     </aside>
   );
-};
-
-export default Sidebar;
+}

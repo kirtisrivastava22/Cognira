@@ -1,100 +1,94 @@
 import React, { useState } from "react";
 
-const Chapters = ({ videoData }) => {
-  const videoId = videoData?.videoId || "";
+const API = import.meta.env.VITE_API_URL || "http://127.0.0.1:8000";
+
+export default function Chapters({ videoData }) {
+  const videoId    = videoData?.videoId    || "";
   const sourceType = videoData?.sourceType || "youtube";
 
   const [chapters, setChapters] = useState([]);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState("");
+  const [loading,  setLoading]  = useState(false);
+  const [error,    setError]    = useState("");
+  const [loaded,   setLoaded]   = useState(false);
 
-  const loadChapters = async () => {
-    setLoading(true);
-    setError("");
-
+  const load = async () => {
+    setLoading(true); setError("");
     try {
-      const response = await fetch(`http://127.0.0.1:8000/chapters/${videoId}`);
-      const data = await response.json();
-
-      if (data.error) {
-        setError(data.error);
-        return;
-      }
-
+      const res  = await fetch(`${API}/chapters/${videoId}`);
+      const data = await res.json();
+      if (data.error) { setError(data.error); return; }
       setChapters(data.chapters || []);
-    } catch (err) {
-      console.error("Error loading chapters:", err);
-      setError("Failed to load chapters. Make sure the backend is running.");
+      setLoaded(true);
+    } catch {
+      setError("Failed to load chapters. Is the backend running?");
     } finally {
       setLoading(false);
     }
   };
 
-  const handleChapterClick = (startTime) => {
-
-    window.dispatchEvent(
-      new CustomEvent("knowitfast:timestamp", {
-        detail: { seconds: startTime, videoId },
-      }),
-    );
+  const seek = (startTime) => {
+    window.dispatchEvent(new CustomEvent("cognira:seek", { detail: { seconds: startTime, videoId } }));
   };
 
   return (
-    <div className="glass-card pad-lg">
-      <div className="card-row" style={{ marginBottom: 16 }}>
-        <div className="chip">Smart chapters</div>
-        <div className="chip">
-          {sourceType === "youtube" ? "YouTube" : "Uploaded media"}
+    <div>
+      <div className="flex items-center justify-between mb-16">
+        <div>
+          <div className="heading" style={{ fontSize: 15 }}>Smart chapters</div>
+          <div className="caption mt-4">AI-detected topic boundaries</div>
         </div>
+        <button className="btn btn-primary btn-sm" onClick={load} disabled={loading}>
+          {loading ? <><span className="spinner" /> Detecting…</> : loaded ? "Refresh" : "Detect chapters"}
+        </button>
       </div>
 
-      <button className="btn-primary load-chapters-btn" onClick={loadChapters} disabled={loading}>
-        {loading ? (
-          <>
-            Loading Chapters...
-          </>
-        ) : (
-          "Load Chapters"
-        )}
-      </button>
+      {error && <div className="status-box status-error mb-16">⚠ {error}</div>}
 
-      {error && (
-        <div className="status-box error" style={{ marginTop: 14 }}>
-           <span>{error}</span>
+      {loading && !chapters.length && (
+        <div className="empty-state">
+          <span className="spinner" style={{ width: 20, height: 20 }} />
+          <span className="body">Analysing transcript structure…</span>
         </div>
       )}
 
       {chapters.length > 0 && (
-        <div className="chapters-list" style={{ marginTop: 16 }}>
-          {chapters.map((chapter, idx) => (
+        <div>
+          {chapters.map((ch, idx) => (
             <div
               key={idx}
               className="chapter-item"
-              onClick={() => handleChapterClick(chapter.start_time)}
-              style={{ cursor: "pointer", padding: 16 }}
+              onClick={() => seek(ch.start_time)}
             >
-              <div className="card-row" style={{ justifyContent: "space-between", alignItems: "center" }}>
-                <div style={{ display: "flex", gap: 14, alignItems: "center" }}>
-                  <div className="chip">{idx + 1}</div>
-                  <div>
-                    <div className="chapter-title">{chapter.title}</div>
-                    <div className="chapter-time text-secondary">{chapter.timestamp}</div>
+              <span className="chapter-num">#{idx + 1}</span>
+              <span className="chapter-time">{ch.timestamp}</span>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div className="chapter-title-text">{ch.title}</div>
+                {ch.summary && (
+                  <div className="caption mt-4" style={{ overflow: "hidden", whiteSpace: "nowrap", textOverflow: "ellipsis" }}>
+                    {ch.summary}
                   </div>
-                </div>
-                <div style={{ fontSize: 18, color: "var(--accent-cyan)" }}>→</div>
+                )}
+                {ch.key_topics?.length > 0 && (
+                  <div className="topic-tags">
+                    {ch.key_topics.map((t, ti) => (
+                      <span key={ti} className="tag tag-default" style={{ fontSize: 10.5 }}>{t}</span>
+                    ))}
+                  </div>
+                )}
               </div>
+              {sourceType !== "docx" && <span className="chapter-arrow">→</span>}
             </div>
           ))}
         </div>
       )}
 
-      {!loading && chapters.length === 0 && !error && (
-        <div className="empty-card" style={{ marginTop: 16 }}>
-          <p>No chapters loaded yet. Click the button above.</p>
+      {!loading && !chapters.length && !error && (
+        <div className="empty-state">
+          <div className="empty-icon">⬡</div>
+          <div className="empty-title">No chapters detected yet</div>
+          <div className="empty-sub">Click the button above to segment this content into chapters.</div>
         </div>
       )}
     </div>
   );
-};
-
-export default Chapters;
+}

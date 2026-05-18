@@ -1,203 +1,122 @@
 import React from "react";
 import { useNavigate } from "react-router-dom";
 
-const Dashboard = ({
-  videoHistory,
-  setCurrentVideo,
-  isSignedIn,
-  user,
-  onOpenAuth,
-  onContinueAsGuest,
-}) => {
-  const navigate = useNavigate();
-  const recentVideos = videoHistory.slice(0, 6);
+const FEATURES = [
+  { icon: "◈", title: "Ask anything",    body: "Timestamped answers from any video, audio, or document." },
+  { icon: "⬡", title: "Smart chapters",  body: "AI detects natural topic shifts and names each section." },
+  { icon: "⊞", title: "Instant quiz",    body: "Multiple-choice questions generated from the actual content." },
+  { icon: "↓", title: "Export notes",    body: "Download polished DOCX study notes in one click." },
+  { icon: "⌕", title: "Doc search",      body: "Full-text search with paragraph-level navigation." },
+  { icon: "◷", title: "Seek & jump",     body: "Click any reference to jump to that exact moment or passage." },
+];
 
-  const handleVideoClick = (video) => {
+export default function Dashboard({ videoHistory, setCurrentVideo, user, onOpenAuth }) {
+  const navigate   = useNavigate();
+  const recent     = videoHistory.slice(0, 6);
+
+  const open = (video) => {
     setCurrentVideo(video);
     navigate("/analyze");
   };
 
   return (
-    <div className="section-grid">
-      <div className="glass-card hero-card">
-        <div className="hero-badge">
-          <span>{isSignedIn ? "Synced account" : "Guest mode"}</span>
+    <div className="page-grid">
+      {/* Hero */}
+      <div className="card card-accent">
+        <div style={{ marginBottom: 20 }}>
+          <span className="tag tag-accent" style={{ marginBottom: 14, display: "inline-flex" }}>
+            {user ? `Synced · ${user.name}` : "Guest mode"}
+          </span>
+          <h1 className="display" style={{ marginBottom: 12 }}>
+            Turn any content<br />
+            <em style={{ fontStyle: "italic", color: "var(--accent)" }}>into clarity.</em>
+          </h1>
+          <p className="body" style={{ maxWidth: 500 }}>
+            Paste a YouTube URL, upload audio or video, or drop a Word document.
+            Cognira builds transcript intelligence and gives you instant answers, chapters, quizzes, and exportable notes.
+          </p>
         </div>
 
-        <h1 className="hero-title">
-          <span className="title">Cognira</span>
-        </h1>
-
-        <p className="hero-subtitle">
-          Turn content into clarity.
-          <br/>
-          Ask any video, audio, lecture, or upload for instant answers, summaries, chapters, quizzes, and exportable notes.
-        </p>
-
-        <div className="hero-actions">
-          <button className="btn-primary" onClick={() => navigate("/analyze")}>
+        <div className="flex gap-10 flex-wrap">
+          <button className="btn btn-primary btn-lg" onClick={() => navigate("/analyze")}>
             Start analyzing
           </button>
-
-          {!isSignedIn && (
-            <button className="btn-secondary" onClick={onOpenAuth}>
-              Sign in to save history
-            </button>
-          )}
-
-          {!isSignedIn && (
-            <button className="btn-ghost" onClick={onContinueAsGuest}>
-              Continue as guest
+          {!user && (
+            <button className="btn btn-secondary" onClick={onOpenAuth}>
+              Sign in to sync history
             </button>
           )}
         </div>
       </div>
 
-      <div className="stats-grid">
-        <div className="stat-card">
-          <div className="stat-content">
-            <h3 className="stat-value">{videoHistory.length}</h3>
-            <p className="stat-label">
-              {isSignedIn ? "Sessions synced" : "Sessions saved locally"}
-            </p>
+      {/* Stats */}
+      <div className="flex gap-12" style={{ flexWrap: "wrap" }}>
+        {[
+          { value: videoHistory.length, label: user ? "Sessions synced" : "Sessions (local)" },
+          { value: "Streaming", label: "Real-time answers" },
+          { value: "3-in-1",    label: "Ask · Chapters · Quiz" },
+        ].map((s, i) => (
+          <div key={i} className="card card-sm" style={{ flex: "1 1 130px" }}>
+            <div className="display-sm" style={{ fontSize: 22, color: "var(--accent)" }}>{s.value}</div>
+            <div className="caption mt-4">{s.label}</div>
           </div>
-        </div>
-
-        <div className="stat-card">
-          <div className="stat-content">
-            <h3 className="stat-value">AI-Powered</h3>
-            <p className="stat-label">Fast answers, chapters, quizzes</p>
-          </div>
-        </div>
-
-        <div className="stat-card">
-          <div className="stat-content">
-            <h3 className="stat-value">Real-time</h3>
-            <p className="stat-label">Streaming responses</p>
-          </div>
-        </div>
+        ))}
       </div>
 
-      <div className="glass-card pad-lg">
-        <h2 className="section-title">Quick Start</h2>
-        <div className="quick-start-grid">
-          <div className="quick-start-item" onClick={() => navigate("/analyze")}>
-            
-            <h3>Analyze media</h3>
-            <p>Paste a YouTube URL or upload audio/video</p>
+      {/* Recent sessions */}
+      {recent.length > 0 && (
+        <div className="card">
+          <div className="section-header">
+            <div className="subheading">Recent sessions</div>
+            <button className="btn btn-ghost btn-sm" onClick={() => navigate("/history")}>View all →</button>
           </div>
-
-          <div className="quick-start-item" onClick={() => navigate("/history")}>
-            
-            <h3>View history</h3>
-            <p>Open your previous sessions</p>
-          </div>
-
-          <div className="quick-start-item">
-            
-            <h3>Ask questions</h3>
-            <p>Get timestamped answers from content</p>
-          </div>
-
-          <div className="quick-start-item">
-            <h3>Export notes</h3>
-            <p>Download polished study notes</p>
-          </div>
-        </div>
-      </div>
-
-      {recentVideos.length > 0 && (
-        <div className="glass-card pad-lg">
-          <div className="card-header">
-            <h2 className="section-title">Recent Sessions</h2>
-            <button className="btn-secondary" onClick={() => navigate("/history")}>
-              View all
-            </button>
-          </div>
-
-          <div className="history-grid" style={{ marginTop: 14 }}>
-            {recentVideos.map((video) => (
-              <div
-                key={`${video.videoId}-${video.timestamp}`}
-                className="history-video-card"
-                onClick={() => handleVideoClick(video)}
-              >
-                <div className="video-thumbnail">
-                  {video.sourceType === "youtube" || !video.sourceType ? (
-                    <img
-                      src={`https://img.youtube.com/vi/${video.videoId}/mqdefault.jpg`}
-                      alt={video.title}
-                    />
-                  ) : (
-                    <div
-                      style={{
-                        width: "100%",
-                        height: "100%",
-                        display: "grid",
-                        placeItems: "center",
-                        background:
-                          "linear-gradient(135deg, rgba(139,92,246,0.25), rgba(34,211,238,0.16))",
-                        color: "white",
-                        fontSize: 42,
-                      }}
-                    >
-                      {video.sourceType === "upload" ? "📁" : "🎧"}
-                    </div>
-                  )}
-                  <div className="video-overlay">
-                    <span className="play-icon">▶</span>
-                  </div>
-                </div>
-
-                <div className="video-info">
-                  <h3 className="video-title">{video.title}</h3>
-                  <p className="video-date">
-                    {new Date(video.timestamp).toLocaleString()}
-                  </p>
-                </div>
-              </div>
+          <div className="history-grid">
+            {recent.map((v, i) => (
+              <HistoryCard key={i} video={v} onClick={() => open(v)} />
             ))}
           </div>
         </div>
       )}
 
-      <div className="features-section">
-  <h2 className="section-title">Features</h2>
-
-  <div className="features-list">
-    <div>
-      <h3>AI Question Answering</h3>
-      <p>Ask any question and get instant timestamped answers.</p>
-    </div>
-
-    <div>
-      <h3>Smart Chapters</h3>
-      <p>Jump to the right moment with auto-detected chapters.</p>
-    </div>
-
-    <div>
-      <h3>Interactive Quizzes</h3>
-      <p>Test understanding with AI-generated quizzes.</p>
-    </div>
-
-    <div>
-      <h3>Export Notes</h3>
-      <p>Download polished DOCX notes and study summaries.</p>
-    </div>
-
-    <div>
-      <h3>Transcript Search</h3>
-      <p>Search through the full transcript in seconds.</p>
-    </div>
-
-    <div>
-      <h3>Timestamp Navigation</h3>
-      <p>Click timestamps to jump to relevant moments.</p>
-    </div>
-  </div>
-</div>
+      {/* Features grid */}
+      <div className="card">
+        <div className="subheading mb-16">What you can do</div>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(200px, 1fr))", gap: 12 }}>
+          {FEATURES.map((f, i) => (
+            <div key={i} style={{
+              padding: "16px 18px", borderRadius: "var(--radius)", border: "1px solid var(--border)",
+              background: "var(--bg-elevated)",
+            }}>
+              <div style={{ fontSize: 20, marginBottom: 8, color: "var(--accent)" }}>{f.icon}</div>
+              <div style={{ fontSize: 13.5, fontWeight: 700, color: "var(--text-primary)", marginBottom: 5 }}>{f.title}</div>
+              <div className="caption" style={{ lineHeight: 1.6 }}>{f.body}</div>
+            </div>
+          ))}
+        </div>
+      </div>
     </div>
   );
-};
+}
 
-export default Dashboard;
+function HistoryCard({ video, onClick }) {
+  const isYoutube  = (video.sourceType || video.source_type) === "youtube" || (!video.sourceType && !video.source_type);
+  const mediaId    = video.videoId || video.media_id;
+  const srcType    = video.sourceType || video.source_type;
+  const date       = video.viewed_at || video.timestamp;
+
+  return (
+    <div className="history-card" onClick={onClick}>
+      <div className="history-thumb">
+        {isYoutube ? (
+          <img src={`https://img.youtube.com/vi/${mediaId}/mqdefault.jpg`} alt={video.title} />
+        ) : (
+          srcType === "docx" ? "📄" : "🎬"
+        )}
+      </div>
+      <div className="history-info">
+        <div className="history-title">{video.title || "Untitled"}</div>
+        <div className="history-date">{date ? new Date(date).toLocaleDateString() : ""}</div>
+      </div>
+    </div>
+  );
+}

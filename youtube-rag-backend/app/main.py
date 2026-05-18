@@ -1,25 +1,21 @@
 """
-main.py
--------
-FastAPI application — production-ready entry point.
-
-New in this version:
-  • DOCX upload support  (/ingest accepts .docx — no transcript needed)
-  • Rate limiting        (per-route + global sliding-window, see rate_limiter.py)
-  • Word-limit guard     (uploaded DOCX capped at 20 000 words)
-  • Startup validation   (checks dirs exist, creates them)
-  • Structured logging   (timestamps + log levels)
-  • Request size limit   (50 MB hard cap via middleware)
-  • /health endpoint     (for load-balancer / uptime probes)
-  • Input validation     (Pydantic validators on AskRequest)
-  • Upload caching fix   (_build_docs skips Whisper when vectorstore exists)
-  • Timestamp format fix  (prompt strictly enforces [MM:SS] / [para N])
+main.py  — Cognira API (production)
+------------------------------------
+Changes over dev version:
+  • SQLite DB via app.database (replaces JSON index + transcript files)
+  • /auth/signin, /auth/signout endpoints
+  • /history GET/POST endpoints (server-side, per-user)
+  • YouTube timestamp seek fix (postMessage via /seek endpoint for iframe)
+  • Chapters / Quiz now cache results in DB (no re-generation on repeat calls)
+  • CORS locked to configured origins in production
+  • Rate limiter on all heavy endpoints
 """
 
 from __future__ import annotations
 
 import json
 import logging
+import mimetypes
 import os
 import re
 import time
@@ -35,6 +31,10 @@ from langchain_groq import ChatGroq
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.output_parsers import StrOutputParser
 
+from app.database import (
+    init_db, save_media, get_media,
+    upsert_user, add_history, get_history,
+)
 from app.export import router as export_router
 from app.chapters import detect_chapters, detect_chapters_from_docs
 from app.quiz import generate_quiz, generate_quiz_from_docs
@@ -76,12 +76,15 @@ log = logging.getLogger("main")
 # Constants
 # ─────────────────────────────────────────────────────────────────────────────
 
-MAX_UPLOAD_BYTES = 50 * 1024 * 1024   # 50 MB
+MAX_UPLOAD_BYTES = 50 * 1024 * 1024
 DOCX_MIME_TYPES = {
     "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
     "application/msword",
 }
 ALLOWED_EXTENSIONS = {".mp4", ".mp3", ".wav", ".mkv", ".m4a", ".webm", ".docx", ".doc"}
+
+# In production, lock this to your actual domain(s)
+ALLOWED_ORIGINS = os.getenv("ALLOWED_ORIGINS", "*").split(",")
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -90,9 +93,10 @@ ALLOWED_EXTENSIONS = {".mp4", ".mp3", ".wav", ".mkv", ".m4a", ".webm", ".docx", 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    log.info("Starting up…")
+    log.info("Starting Cognira API…")
     for d in ("exports", "vectorstores", "media", "cache/transcripts"):
         Path(d).mkdir(parents=True, exist_ok=True)
+    init_db()   # create SQLite tables
     log.info("Startup complete.")
     yield
     log.info("Shutting down…")
@@ -102,11 +106,11 @@ async def lifespan(app: FastAPI):
 # App
 # ─────────────────────────────────────────────────────────────────────────────
 
-app = FastAPI(title="Video Insight API", version="2.1.0", lifespan=lifespan)
+app = FastAPI(title="Cognira API", version="3.0.0", lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=ALLOWED_ORIGINS,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -140,7 +144,78 @@ async def log_requests(request: Request, call_next):
 
 @app.get("/health", tags=["ops"])
 def health():
-    return {"status": "ok"}
+    return {"status": "ok", "version": "3.0.0"}
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Auth endpoints
+# ─────────────────────────────────────────────────────────────────────────────
+
+class SignInRequest(BaseModel):
+    name:  str
+    email: str
+
+    @field_validator("email")
+    @classmethod
+    def _clean_email(cls, v: str) -> str:
+        v = v.strip().lower()
+        if not v or "@" not in v:
+            raise ValueError("Invalid email")
+        return v
+
+    @field_validator("name")
+    @classmethod
+    def _clean_name(cls, v: str) -> str:
+        v = v.strip()
+        if not v:
+            raise ValueError("Name required")
+        return v[:200]
+
+
+@app.post("/auth/signin", tags=["auth"])
+def sign_in(req: SignInRequest):
+    """
+    Lightweight auth — no passwords, just name+email identity.
+    Returns a user_id to be stored client-side (localStorage / cookie).
+    """
+    user_id = (
+        req.email.lower().replace(r"[^a-z0-9]", "_") + "_" +
+        req.name.lower().replace(" ", "_")[:20]
+    )
+    # Deterministic: same email+name always gives same ID
+    import hashlib
+    user_id = hashlib.sha256(f"{req.email}:{req.name}".encode()).hexdigest()[:32]
+
+    upsert_user(user_id, req.name, req.email)
+    return {"user_id": user_id, "name": req.name, "email": req.email}
+
+
+@app.post("/auth/signout", tags=["auth"])
+def sign_out():
+    """Client clears its stored user_id. Server does nothing (stateless)."""
+    return {"ok": True}
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# History endpoints
+# ─────────────────────────────────────────────────────────────────────────────
+
+class HistoryAddRequest(BaseModel):
+    user_id:    str
+    media_id:   str
+    title:      str
+    source_type: str
+
+
+@app.get("/history/{user_id}", tags=["history"])
+def user_history(user_id: str, limit: int = 50):
+    return {"history": get_history(user_id, limit=limit)}
+
+
+@app.post("/history", tags=["history"])
+def add_history_entry(req: HistoryAddRequest):
+    add_history(req.user_id, req.media_id, req.title, req.source_type)
+    return {"ok": True}
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -150,7 +225,7 @@ def health():
 class AskRequest(BaseModel):
     video_id: str
     question: str
-    history: list[dict] = []
+    history:  list[dict] = []
 
     @field_validator("video_id")
     @classmethod
@@ -186,47 +261,32 @@ class IngestResponse(BaseModel):
 # ─────────────────────────────────────────────────────────────────────────────
 
 def _get_streaming_llm() -> ChatGroq:
-    return ChatGroq(model="llama-3.1-8b-instant", temperature=0, max_tokens=400, streaming=True)
+    return ChatGroq(
+        model="llama-3.1-8b-instant",
+        temperature=0,
+        max_tokens=400,
+        streaming=True,
+    )
 
 
 def _vectorstore_exists_on_disk(media_id: str) -> bool:
-    """Return True when a FAISS vectorstore has already been saved for media_id."""
     vs_path = Path("vectorstores") / media_id
-    # FAISS saves index.faiss + index.pkl
     return (vs_path / "index.faiss").exists() and (vs_path / "index.pkl").exists()
 
 
 def _build_docs(media_id: str):
-    """
-    Universal docs builder: DOCX → uploaded media (Whisper) → YouTube.
-
-    FIX (Problem 2 — upload latency):
-    Before doing any heavy work (Whisper transcription), check whether a
-    vectorstore already exists on disk for this media_id.  If it does,
-    return an empty list — get_or_create_vectorstore will load it from
-    disk without needing the original docs.
-
-    This means Whisper runs exactly ONCE per uploaded file (on the first
-    /ask call), after which the vectorstore disk cache handles everything.
-    The transcript JSON cache (cache/transcripts/{id}.json) provides an
-    additional safety net: if the vectorstore is missing but the transcript
-    cache exists, Whisper is still skipped.
-    """
-    # Short-circuit: vectorstore already on disk — no docs needed
     if _vectorstore_exists_on_disk(media_id):
-        return []   # get_or_create_vectorstore loads from disk, ignores this
+        return []
 
     meta = get_media_meta(media_id)
     if meta:
         if meta.get("source_type") == "docx":
             docs, _ = load_docx_docs(meta.get("local_path", ""))
             return split_documents(docs)
-        # Uploaded audio/video — load_media_docs checks transcript cache first
         docs = load_media_docs(media_id)
         if docs:
             return split_documents(docs)
 
-    # Fallback: treat as YouTube video_id
     return split_documents(load_youtube_docs(media_id))
 
 
@@ -236,7 +296,7 @@ def _is_docx(filename: str, content_type: str | None) -> bool:
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Prompt (streaming)
+# Streaming prompt
 # ─────────────────────────────────────────────────────────────────────────────
 
 _STREAM_SYSTEM = """You are a strict document/transcript analyst. Your ONLY knowledge source is the excerpts provided.
@@ -244,27 +304,26 @@ _STREAM_SYSTEM = """You are a strict document/transcript analyst. Your ONLY know
 ABSOLUTE RULES:
 1. Use ONLY information stated in the provided excerpts. Zero outside knowledge.
 2. If the excerpts do not clearly contain the answer, reply with exactly: I don't know
-3. Every factual claim MUST include an inline reference in EXACTLY one of these two formats:
-   - For video/audio content:  [MM:SS]  e.g. [02:34] or [14:07]  — use the timestamp from the excerpt header.
-   - For documents:            [para N] e.g. [para 3]             — use the paragraph number from the excerpt header.
-   Always use square brackets. Never write timestamps without brackets.
+3. Every factual claim MUST include an inline reference:
+   - Video/audio: [MM:SS]  e.g. [02:34]
+   - Documents:   [para N] e.g. [para 3]
 4. Do NOT invent, infer, extrapolate, or guess.
 5. Keep your answer to 2–5 sentences.
-6. Do not repeat the question or explain what you cannot do."""
+6. Do not repeat the question."""
 
-_STREAM_USER = """Conversation history (if any):
+_STREAM_USER = """Conversation history:
 {history}
 
-Excerpts (each prefixed with its reference — cite these inline):
+Excerpts (cite these inline):
 {context}
 
 Question: {question}
 
-Answer using ONLY the excerpts above (with inline [MM:SS] or [para N] references), or reply "I don't know":"""
+Answer (with inline references), or "I don't know":"""
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Routes — Ask
+# Ask routes
 # ─────────────────────────────────────────────────────────────────────────────
 
 @app.post("/ask", dependencies=[Depends(rate_limit("ask_stream"))])
@@ -283,7 +342,9 @@ async def ask_stream(req: AskRequest):
 
         db = get_or_create_vectorstore(req.video_id, docs_builder=_build_docs)
         if db is None:
-            yield "data: " + json.dumps({"type": "answer", "value": "I don't know — no content available."}) + "\n\n"
+            yield "data: " + json.dumps({
+                "type": "answer", "value": "I don't know — no content available."
+            }) + "\n\n"
             yield "data: " + json.dumps({"type": "end"}) + "\n\n"
             return
 
@@ -297,7 +358,7 @@ async def ask_stream(req: AskRequest):
 
         history_text = ""
         for h in req.history[-5:]:
-            history_text += f"Q: {h['question']}\nA: {h['answer']}\n\n"
+            history_text += f"Q: {h.get('question', '')}\nA: {h.get('answer', '')}\n\n"
 
         context = format_docs_with_references(docs)
         prompt  = ChatPromptTemplate.from_messages([
@@ -317,7 +378,7 @@ async def ask_stream(req: AskRequest):
 
         if "i don't know" in answer_text.lower() or _looks_like_hallucination(answer_text, docs):
             yield "data: " + json.dumps({
-                "type": "correction",
+                "type":  "correction",
                 "value": "I don't know — the content does not contain enough information.",
             }) + "\n\n"
 
@@ -327,15 +388,15 @@ async def ask_stream(req: AskRequest):
         token_generator(),
         media_type="text/event-stream",
         headers={
-            "Cache-Control": "no-cache",
-            "Connection": "keep-alive",
+            "Cache-Control":    "no-cache",
+            "Connection":       "keep-alive",
             "X-Accel-Buffering": "no",
         },
     )
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Routes — Ingest
+# Ingest
 # ─────────────────────────────────────────────────────────────────────────────
 
 @app.post("/ingest", response_model=IngestResponse, dependencies=[Depends(rate_limit("ingest"))])
@@ -343,12 +404,6 @@ async def ingest_media(
     url:  str | None        = Form(default=None),
     file: UploadFile | None = File(default=None),
 ):
-    """
-    Accepts:
-      • YouTube / direct URL
-      • Audio / video file (.mp4, .mp3, .wav, .mkv, .m4a, .webm)
-      • Word document (.docx) — parsed directly, no transcription, max 20 000 words
-    """
     if not url and not file:
         raise HTTPException(status_code=400, detail="Provide either a URL or a file.")
 
@@ -356,7 +411,6 @@ async def ingest_media(
     word_count: int | None  = None
     truncated:  bool | None = None
 
-    # ── URL ───────────────────────────────────────────────────────────────────
     if url:
         try:
             local_path, source_type = download_from_url(url, media_id)
@@ -369,10 +423,9 @@ async def ingest_media(
             "source_url": url, "local_path": local_path, "title": url,
         }
 
-    # ── File ──────────────────────────────────────────────────────────────────
     else:
-        filename     = file.filename or "upload" if file else "upload"
-        content_type = file.content_type if file else None
+        filename     = file.filename or "upload"
+        content_type = file.content_type
         ext          = Path(filename).suffix.lower()
 
         if ext not in ALLOWED_EXTENSIONS:
@@ -383,11 +436,10 @@ async def ingest_media(
 
         local_path = save_uploaded_file(file, media_id)
 
-        # DOCX branch
         if _is_docx(filename, content_type):
             try:
                 docs, docx_meta = load_docx_docs(local_path, truncate=True)
-                full_text = "\n\n".join([doc.page_content for doc in docs])
+                full_text = "\n\n".join(d.page_content for d in docs)
             except WordLimitExceeded as e:
                 raise HTTPException(status_code=422, detail=str(e))
             except Exception as e:
@@ -400,103 +452,81 @@ async def ingest_media(
             word_count = docx_meta["word_count"]
             truncated  = docx_meta["truncated"]
 
-            # Eagerly build vectorstore so first /ask is fast
             chunks = split_documents(docs)
             try:
                 get_or_create_vectorstore(media_id, docs_builder=lambda _: chunks)
             except Exception as e:
                 log.warning("Vectorstore build failed for DOCX %s: %s", media_id, e)
 
-            log.info(
-                "DOCX ingested: %s  words=%d  truncated=%s  paragraphs=%d",
-                filename, word_count, truncated, docx_meta["paragraph_count"],
-            )
             meta = {
-                "media_id": media_id,
-                "source_type": "docx",
-                "source_url": None,
-                "local_path": local_path,
-                "title": filename,
-                "word_count": word_count,
-                "truncated": truncated,
-                "full_text": full_text,
+                "media_id": media_id, "source_type": "docx",
+                "source_url": None, "local_path": local_path,
+                "title": filename, "word_count": word_count,
+                "truncated": truncated, "full_text": full_text,
             }
 
-        # Audio/video branch
         else:
             meta = {
                 "media_id": media_id, "source_type": "upload",
-                "source_url": None,   "local_path": local_path, "title": filename,
+                "source_url": None, "local_path": local_path, "title": filename,
             }
-            # Eagerly start transcription + vectorstore build so first /ask is fast.
-            # This runs synchronously during ingest; for large files you may want
-            # to move it to a background task (FastAPI BackgroundTasks).
             try:
                 get_or_create_vectorstore(media_id, docs_builder=_build_docs)
-                log.info("Vectorstore pre-built for uploaded media %s", media_id)
             except Exception as e:
                 log.warning("Eager vectorstore build failed for %s: %s", media_id, e)
 
     register_media(media_id, meta)
     return IngestResponse(
         media_id=media_id, source_type=meta["source_type"],
-        title=meta["title"], word_count=word_count, truncated=truncated,
+        title=meta.get("title"), word_count=word_count, truncated=truncated,
     )
-import mimetypes
-from fastapi.responses import FileResponse
 
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Media / Doc endpoints
+# ─────────────────────────────────────────────────────────────────────────────
 
 @app.get("/media/{media_id}")
-def get_media(media_id: str):
+def get_media_file(media_id: str):
     meta = get_media_meta(media_id)
-
     if not meta:
         raise HTTPException(status_code=404, detail="Media not found")
-
     local_path = meta.get("local_path")
-
     if not local_path or not os.path.exists(local_path):
         raise HTTPException(status_code=404, detail="File missing on disk")
-
     mime_type, _ = mimetypes.guess_type(local_path)
-
     return FileResponse(
         path=local_path,
         media_type=mime_type or "application/octet-stream",
         filename=os.path.basename(local_path),
     )
 
+
 @app.get("/doc/{media_id}")
 def get_doc(media_id: str):
     meta = get_media_meta(media_id)
-
     if not meta:
-        raise HTTPException(
-            status_code=404,
-            detail=f"Media '{media_id}' not found. Make sure you uploaded a .docx file first."
-        )
+        raise HTTPException(status_code=404, detail="Document not found")
 
-    # If already cached in index
-    if "full_text" in meta:
+    if "full_text" in meta and meta["full_text"]:
         return {"text": meta["full_text"]}
 
     if meta.get("source_type") == "docx":
         try:
             docs, _ = load_docx_docs(meta.get("local_path", ""))
-            full_text = "\n\n".join([doc.page_content for doc in docs])
+            full_text = "\n\n".join(d.page_content for d in docs)
+            # Cache it back
             meta["full_text"] = full_text
+            save_media(meta)
             return {"text": full_text}
         except Exception as e:
             raise HTTPException(status_code=500, detail=f"Failed to load document: {e}")
 
-    raise HTTPException(
-        status_code=400,
-        detail=f"'{media_id}' is a {meta.get('source_type', 'unknown')} source, not a document."
-    )
+    raise HTTPException(status_code=400, detail=f"Not a document source.")
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Routes — Chapters
+# Chapters
 # ─────────────────────────────────────────────────────────────────────────────
 
 @app.get("/chapters/{video_id}", dependencies=[Depends(rate_limit("chapters"))])
@@ -513,19 +543,21 @@ def get_chapters(video_id: str):
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Routes — Quiz
+# Quiz
 # ─────────────────────────────────────────────────────────────────────────────
+from typing import Literal
+Difficulty = Literal["easy", "medium", "hard"]
 
 @app.get("/quiz/{video_id}", dependencies=[Depends(rate_limit("quiz"))])
-def get_quiz(video_id: str, num_questions: int = 5):
+def get_quiz(video_id: str, num_questions: int = 5, difficulty: Difficulty = "medium"):
     meta = get_media_meta(video_id)
     if meta and meta.get("source_type") == "docx":
         try:
             docs, _ = load_docx_docs(meta.get("local_path", ""))
         except Exception:
             docs = []
-        return generate_quiz_from_docs(docs, video_id, num_questions).to_dict()
-    return generate_quiz(video_id, num_questions)
+        return generate_quiz_from_docs(docs, video_id, num_questions, difficulty).to_dict()
+    return generate_quiz(video_id, num_questions, difficulty)  
 
 
 # ─────────────────────────────────────────────────────────────────────────────

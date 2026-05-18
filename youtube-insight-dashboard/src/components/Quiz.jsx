@@ -1,230 +1,188 @@
 import React, { useState } from "react";
 
-const Quiz = ({ videoData }) => {
+const API = import.meta.env.VITE_API_URL || "http://127.0.0.1:8000";
+
+export default function Quiz({ videoData }) {
   const videoId = videoData?.videoId || "";
 
-  const [quiz, setQuiz] = useState(null);
-  const [userAnswers, setUserAnswers] = useState([]);
-  const [showResults, setShowResults] = useState(false);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState("");
-  const [numQuestions, setNumQuestions] = useState(5);
+  const [quiz,          setQuiz]          = useState(null);
+  const [userAnswers,   setUserAnswers]   = useState([]);
+  const [showResults,   setShowResults]   = useState(false);
+  const [loading,       setLoading]       = useState(false);
+  const [error,         setError]         = useState("");
+  const [numQuestions,  setNumQuestions]  = useState(5);
+  const [difficulty,    setDifficulty]    = useState("medium");
 
-  const generateQuiz = async () => {
-    setLoading(true);
-    setError("");
-    setShowResults(false);
-
+  const generate = async () => {
+    setLoading(true); setError(""); setShowResults(false);
     try {
-      const response = await fetch(
-        `http://127.0.0.1:8000/quiz/${videoId}?num_questions=${numQuestions}`,
-      );
-      const data = await response.json();
-
-      if (data.error) {
-        setError(data.error);
-        return;
-      }
-
+      const res  = await fetch(`${API}/quiz/${videoId}?num_questions=${numQuestions}&difficulty=${difficulty}`);
+      const data = await res.json();
+      if (data.error) { setError(data.error); return; }
+      if (!data.questions?.length) { setError("No questions generated."); return; }
       setQuiz(data.questions);
       setUserAnswers(new Array(data.questions.length).fill(null));
-    } catch (err) {
-      console.error("Error generating quiz:", err);
-      setError("Failed to generate quiz. Make sure the backend is running.");
+    } catch {
+      setError("Failed to generate quiz. Is the backend running?");
     } finally {
       setLoading(false);
     }
   };
 
-  const handleAnswerSelect = (questionIndex, optionIndex) => {
-    const newAnswers = [...userAnswers];
-    newAnswers[questionIndex] = optionIndex;
-    setUserAnswers(newAnswers);
+  const select = (qi, oi) => {
+    if (showResults) return;
+    const next = [...userAnswers];
+    next[qi] = oi;
+    setUserAnswers(next);
   };
 
-  const submitQuiz = () => {
-    setShowResults(true);
-  };
+  const submit = () => setShowResults(true);
+  const reset  = () => { setQuiz(null); setUserAnswers([]); setShowResults(false); setError(""); };
 
-  const resetQuiz = () => {
-    setQuiz(null);
-    setUserAnswers([]);
-    setShowResults(false);
-  };
+  const score = quiz ? quiz.filter((q, i) => userAnswers[i] === q.correct).length : 0;
+  const pct   = quiz ? Math.round((score / quiz.length) * 100) : 0;
+  const pass  = pct >= 60;
 
-  const calculateScore = () => {
-    let correct = 0;
-    quiz.forEach((q, idx) => {
-      if (userAnswers[idx] === q.correct) correct++;
-    });
-    return correct;
-  };
-
-  if (loading) {
-    return (
-      <div className="glass-card pad-lg" style={{ textAlign: "center" }}>
-        <p style={{ marginTop: 12 }}>Generating quiz questions...</p>
-      </div>
-    );
-  }
-
+  /* Config screen */
   if (!quiz) {
     return (
-      <div className="glass-card pad-lg">
-        <div className="card-row" style={{ marginBottom: 16 }}>
-          <div className="chip">Quiz</div>
-          <div className="chip">AI-generated</div>
-        </div>
+      <div>
+        <div className="heading" style={{ fontSize: 15, marginBottom: 4 }}>AI Quiz</div>
+        <div className="caption mb-24">Questions generated directly from the content</div>
 
-        <div className="quiz-config" style={{ marginBottom: 16 }}>
-          <label htmlFor="num-questions" className="section-title" style={{ display: "block" }}>
-            Number of Questions
-          </label>
-          <select
-            id="num-questions"
-            className="input-field"
-            value={numQuestions}
-            onChange={(e) => setNumQuestions(parseInt(e.target.value, 10))}
-            style={{ maxWidth: 220 }}
-          >
-            <option value={3}>3 Questions</option>
-            <option value={5}>5 Questions</option>
-            <option value={7}>7 Questions</option>
-            <option value={10}>10 Questions</option>
-          </select>
-        </div>
-
-        <button className="btn-primary" onClick={generateQuiz}>
-          Generate Quiz
-        </button>
-
-        {error && (
-          <div className="status-box error" style={{ marginTop: 14 }}>
-            ⚠️ <span>{error}</span>
+        <div className="flex gap-16 mb-20" style={{ flexWrap: "wrap" }}>
+          <div className="field-group" style={{ minWidth: 140 }}>
+            <label>Questions</label>
+            <select value={numQuestions} onChange={e => setNumQuestions(+e.target.value)}>
+              <option value={3}>3</option>
+              <option value={5}>5</option>
+              <option value={7}>7</option>
+              <option value={10}>10</option>
+            </select>
           </div>
+          <div className="field-group" style={{ minWidth: 140 }}>
+            <label>Difficulty</label>
+            <select value={difficulty} onChange={e => setDifficulty(e.target.value)}>
+              <option value="easy">Easy</option>
+              <option value="medium">Medium</option>
+              <option value="hard">Hard</option>
+            </select>
+          </div>
+        </div>
+
+        {loading ? (
+          <div className="empty-state">
+            <span className="spinner" style={{ width: 20, height: 20 }} />
+            <span className="body">Extracting facts and building questions…</span>
+            <span className="caption">This takes 20–40 seconds for quality results</span>
+          </div>
+        ) : (
+          <button className="btn btn-primary" onClick={generate}>Generate quiz</button>
         )}
 
-        <div className="empty-card" style={{ marginTop: 16 }}>
-          <div className="empty-icon">📝</div>
-          <p>Test your understanding with an AI-generated quiz.</p>
-        </div>
+        {error && <div className="status-box status-error mt-16">⚠ {error}</div>}
       </div>
     );
   }
 
+  /* Results screen */
   if (showResults) {
-    const score = calculateScore();
-    const percentage = Math.round((score / quiz.length) * 100);
-    const passed = percentage >= 60;
-
     return (
-      <div className="glass-card pad-lg">
-        <div className={`quiz-results ${passed ? "pass" : "fail"}`}>
-          <div className="score-card">
-            <div className="score-icon">{passed ? "🎉" : "😶‍🌫️"}</div>
-            <h3 className="score-title">{passed ? "Great Job!" : "Keep Learning!"}</h3>
-            <div className="score-display">
-              <span className="score-value">
-                {score}/{quiz.length}
-              </span>
-              <br />
-              <span className="score-percentage">{percentage}%</span>
-            </div>
-          </div>
+      <div>
+        <div className={`score-ring ${pass ? "pass" : "fail"}`}>
+          {pct}%
+        </div>
+        <div style={{ textAlign: "center", marginBottom: 24 }}>
+          <div className="heading">{pass ? "Well done!" : "Keep studying"}</div>
+          <div className="caption mt-4">{score} of {quiz.length} correct</div>
         </div>
 
-        <div className="quiz-review" style={{ marginTop: 18 }}>
-          {quiz.map((q, idx) => {
-            const userAns = userAnswers[idx];
-            const isCorrect = userAns === q.correct;
+        <div className="divider" />
 
-            return (
-              <div key={idx} className={`review-card ${isCorrect ? "correct" : "wrong"}`} style={{ padding: 16 }}>
-                <div className="review-header" style={{ display: "flex", justifyContent: "space-between", gap: 12 }}>
-                  <span className="review-number">Question {idx + 1}</span>
-                  <span className={`chip ${isCorrect ? "good" : "warn"}`}>
-                    {isCorrect ? "✓ Correct" : "✗ Wrong"}
-                  </span>
-                </div>
-
-                <div className="review-question" style={{ marginTop: 10 }}>
-                  {q.question}
-                </div>
-
-                <div className="review-answers" style={{ marginTop: 10 }}>
-                  {!isCorrect && userAns !== null && (
-                    <div className="your-answer wrong">
-                      Your answer: {q.options[userAns]}
-                    </div>
-                  )}
-                  <div className="correct-answer">
-                    Correct answer: {q.options[q.correct]}
-                  </div>
-                </div>
-
-                <div className="review-explanation text-secondary" style={{ marginTop: 10 }}>
-                  {q.explanation}
-                </div>
+        {quiz.map((q, qi) => {
+          const correct = userAnswers[qi] === q.correct;
+          return (
+            <div key={qi} style={{ marginBottom: 18, padding: "16px 18px", borderRadius: "var(--radius-lg)", border: `1px solid ${correct ? "rgba(74,222,128,0.25)" : "rgba(248,113,113,0.25)"}`, background: correct ? "var(--green-dim)" : "var(--red-dim)" }}>
+              <div className="flex items-center justify-between mb-8">
+                <span className="caption">Question {qi + 1}</span>
+                <span className={`tag ${correct ? "tag-green" : "tag-red"}`}>{correct ? "✓ Correct" : "✗ Wrong"}</span>
               </div>
-            );
-          })}
-        </div>
+              <div style={{ fontSize: 14, fontWeight: 500, color: "var(--text-primary)", marginBottom: 10 }}>{q.question}</div>
+              {!correct && userAnswers[qi] !== null && (
+                <div style={{ fontSize: 13, color: "var(--red)", marginBottom: 4 }}>
+                  Your answer: {q.options[userAnswers[qi]]}
+                </div>
+              )}
+              <div style={{ fontSize: 13, color: "var(--green)", marginBottom: 8 }}>
+                Correct: {q.options[q.correct]}
+              </div>
+              {q.explanation && (
+                <div className="caption" style={{ lineHeight: 1.6, color: "var(--text-secondary)" }}>{q.explanation}</div>
+              )}
+            </div>
+          );
+        })}
 
-        <button className="btn-primary" onClick={resetQuiz} style={{ marginTop: 16 }}>
-          Take Another Quiz
-        </button>
+        <button className="btn btn-primary mt-16" onClick={reset}>Try again</button>
       </div>
     );
   }
+
+  /* Quiz screen */
+  const allAnswered = userAnswers.every(a => a !== null);
 
   return (
-    <div className="glass-card pad-lg">
-      <div className="card-row" style={{ marginBottom: 16 }}>
-        <div className="chip">Quiz</div>
-        <div className="chip">Question set ready</div>
+    <div>
+      <div className="flex items-center justify-between mb-20">
+        <div>
+          <div className="heading" style={{ fontSize: 15 }}>Quiz · {difficulty}</div>
+          <div className="caption mt-4">{quiz.length} questions</div>
+        </div>
+        <button className="btn btn-ghost btn-sm" onClick={reset}>← New quiz</button>
       </div>
 
-      <div className="quiz-questions">
-        {quiz.map((q, qIdx) => (
-          <div key={qIdx} className="quiz-card" style={{ padding: 16 }}>
-            <div className="card-row" style={{ justifyContent: "space-between" }}>
-              <span className="chip">Question {qIdx + 1}</span>
-              <span className="chip">
-                {qIdx + 1}/{quiz.length}
+      {quiz.map((q, qi) => (
+        <div key={qi} style={{ marginBottom: 20 }}>
+          <div className="flex items-center gap-8 mb-10">
+            <span className="tag tag-default" style={{ fontFamily: "DM Mono, monospace" }}>
+              {qi + 1}/{quiz.length}
+            </span>
+            {q.timestamp && (
+              <span className="tag tag-accent" style={{ fontFamily: "DM Mono, monospace", fontSize: 11 }}>
+                {q.timestamp}
               </span>
-            </div>
-
-            <div className="quiz-question" style={{ marginTop: 12 }}>
-              {q.question}
-            </div>
-
-            <div className="quiz-options" style={{ display: "grid", gap: 10, marginTop: 14 }}>
-              {q.options.map((opt, optIdx) => (
-                <label key={optIdx} className="quiz-option">
-                  <input
-                    type="radio"
-                    name={`q${qIdx}`}
-                    checked={userAnswers[qIdx] === optIdx}
-                    onChange={() => handleAnswerSelect(qIdx, optIdx)}
-                  />
-                  <span className="option-text">{opt}</span>
-                </label>
-              ))}
-            </div>
+            )}
           </div>
-        ))}
-      </div>
+          <div style={{ fontSize: 14, fontWeight: 500, color: "var(--text-primary)", marginBottom: 12, lineHeight: 1.6 }}>
+            {q.question}
+          </div>
+          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+            {q.options.map((opt, oi) => (
+              <label key={oi} className={`quiz-option${userAnswers[qi] === oi ? " selected" : ""}`}
+                onClick={() => select(qi, oi)} style={{ cursor: "pointer" }}>
+                <span style={{
+                  width: 20, height: 20, border: "2px solid",
+                  borderColor: userAnswers[qi] === oi ? "var(--accent)" : "var(--border-strong)",
+                  background: userAnswers[qi] === oi ? "var(--accent)" : "transparent",
+                  flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center",
+                  transition: "all 0.15s",
+                }}>
+                  {userAnswers[qi] === oi && <span style={{ width: 8, height: 8, background: "var(--text-inverse)", borderRadius: "50%" }} />}
+                </span>
+                <span style={{ flex: 1, fontSize: 13.5 }}>{opt}</span>
+              </label>
+            ))}
+          </div>
+        </div>
+      ))}
 
       <button
-        className="btn-primary"
-        onClick={submitQuiz}
-        disabled={userAnswers.some((ans) => ans === null)}
-        style={{ marginTop: 16 }}
+        className="btn btn-primary"
+        onClick={submit}
+        disabled={!allAnswered}
       >
-        Submit Quiz
+        {allAnswered ? "Submit quiz" : `${quiz.length - userAnswers.filter(a => a !== null).length} remaining`}
       </button>
     </div>
   );
-};
-
-export default Quiz;
+}
