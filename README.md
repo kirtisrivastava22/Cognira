@@ -1,16 +1,62 @@
-# 🎬 YouTube Insight Assistant
+# 🧠 Cognira — Turn any content into clarity.
 
-> An AI-powered YouTube video analysis system using RAG (Retrieval Augmented Generation) for intelligent Q&A, chapter detection, quiz generation, and comprehensive note-taking.
+Paste a YouTube URL, upload audio or video, or drop a Word document. Cognira builds transcript intelligence and gives you instant answers, chapters, quizzes, and exportable notes.
 
-[![Python](https://img.shields.io/badge/Python-3.9+-blue.svg)](https://www.python.org/)
-[![React](https://img.shields.io/badge/React-18.2-61dafb.svg)](https://reactjs.org/)
-[![FastAPI](https://img.shields.io/badge/FastAPI-0.100+-009688.svg)](https://fastapi.tiangolo.com/)
-[![LangChain](https://img.shields.io/badge/LangChain-Latest-green.svg)](https://langchain.com/)
-[![License](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
-
-![Project Demo](docs/yt-insight-demo.mp4)
+> A production-grade, AI platform with persistent conversations, intelligent context handling, and a high-performance UI — built from scratch with custom architecture and real-world scalability in mind.
 
 ---
+
+## 🌟 Overview
+
+Cognira is a full-stack conversational AI system designed to deliver **fast, context-aware, and persistent chat experiences**.
+
+Unlike basic chat apps, Cognira focuses on:
+- ⚡ **Low-latency interactions**
+- 🧠 **Context preservation across conversations**
+- 🗂️ **Structured conversation management**
+- 🔗 **Shareable AI conversations**
+
+---
+
+## ✨ Core Features
+
+### 💬 **Advanced Chat System**
+- Context-aware AI responses
+- Multi-turn conversation memory
+- Clean ChatGPT-like interface
+- Streaming-ready architecture
+
+---
+
+### 🗂️ **Smart Conversation Management**
+- Persistent chat history
+- Grouping: **Today / Yesterday / Older**
+- Rename conversations inline
+- Delete with **optimistic UI updates**
+- Instant sidebar updates (no reloads)
+
+---
+
+### ⚡ **High-Performance Sidebar**
+- Memoized rendering (`useMemo`)
+- Component-level optimization (`React.memo`)
+- Smooth UX with zero lag
+- Dynamic dropdown menus (rename/delete/share)
+
+---
+
+### 🔗 **Conversation Sharing**
+- Generate public share links
+- View conversations without login
+- Read-only shared interface
+
+---
+
+### 🎯 **UX Engineering Highlights**
+- Click-outside dropdown handling
+- Event propagation control
+- Optimized state synchronization
+- Zero flicker UI transitions
 
 ## 🌟 Key Features
 
@@ -407,25 +453,3 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for details.
 - [Groq](https://groq.com) for fast LLM inference
 - [FAISS](https://github.com/facebookresearch/faiss) for vector search
 - [FastAPI](https://fastapi.tiangolo.com) for backend framework
-
----
-
-## 📸 Screenshots
-
-### Dashboard
-![Dashboard](docs/screenshots/dashboard.png)
-
-### Detect Chapters 
-![Quiz](docs/screenshots/chapters.png)
-
-### History saved
-![Dashboard](docs/screenshots/history.png)
-
-### Q&A with Citations
-![QA](docs/screenshots/qa.png)
-
-### Quiz Generation
-![Quiz](docs/screenshots/quiz.png)
-
-### Chrome Extension
-![Extension](docs/screenshots/extension.png)
