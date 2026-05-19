@@ -15,8 +15,6 @@ import json
 import logging
 import os
 import re
-import subprocess
-import tempfile
 from datetime import datetime
 from pathlib import Path
 
@@ -41,13 +39,59 @@ log = logging.getLogger("export")
 
 router = APIRouter()
 
-_GENERATOR_SCRIPT = Path(__file__).parent / "docx_generator.js"
-
 
 # ──────────────────────────────────────────────────────────────────────────
 # Metadata helpers
 # ──────────────────────────────────────────────────────────────────────────
+from docx import Document
+from docx.shared import Pt
+from docx.enum.text import WD_ALIGN_PARAGRAPH
 
+def generate_docx_from_payload(payload: dict, output_path: str):
+    doc = Document()
+
+    # ── Title ─────────────────────────────
+    title = doc.add_heading(payload["video_title"], 0)
+    title.alignment = WD_ALIGN_PARAGRAPH.CENTER
+
+    meta = doc.add_paragraph()
+    meta.add_run(f'{payload["channel_name"]}\n').bold = True
+    meta.add_run(f'{payload["video_url"]}\n')
+    meta.add_run(f'Generated at: {payload["generated_at"]}')
+    meta.alignment = WD_ALIGN_PARAGRAPH.CENTER
+
+    doc.add_paragraph("")  # spacing
+
+    # ── Summary ───────────────────────────
+    doc.add_heading("Executive Summary", level=1)
+    p = doc.add_paragraph(payload["summary"])
+    p.paragraph_format.space_after = Pt(10)
+
+    # ── Sections ──────────────────────────
+    for section in payload["sections"]:
+        doc.add_heading(section["heading"], level=1)
+        for bullet in section["bullets"]:
+            p = doc.add_paragraph(style='List Bullet')
+            run = p.add_run(bullet)
+            run.font.size = Pt(11)
+
+    # ── Takeaways ─────────────────────────
+    doc.add_heading("Key Takeaways", level=1)
+    for t in payload["key_takeaways"]:
+        p = doc.add_paragraph(style='List Bullet')
+        run = p.add_run(t)
+        run.bold = True  # highlight
+
+    # ── Timestamps ────────────────────────
+    if payload.get("timestamps"):
+        doc.add_heading("Important Moments", level=1)
+        for ts in payload["timestamps"]:
+            p = doc.add_paragraph(style='List Bullet')
+            p.add_run(f'{ts["display"]} ').bold = True
+            p.add_run(f'— {ts["label"]}')
+
+    doc.save(output_path)
+    
 def get_video_metadata(video_id: str) -> dict:
     try:
         res = requests.get(
@@ -201,33 +245,52 @@ def export_docx(video_id: str):
         "timestamps":   timestamps,
     }
 
-    # ── Node.js generator ─────────────────────────────────────────────────────
+    # # ── Node.js generator ─────────────────────────────────────────────────────
+    # export_dir = Path("exports")
+    # export_dir.mkdir(exist_ok=True)
+    # out_path = export_dir / f"{video_id}_notes.docx"
+
+    # with tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False, encoding="utf-8") as tmp:
+    #     json.dump(payload, tmp, ensure_ascii=False)
+    #     tmp_path = tmp.name
+
+    # try:
+    #     result = subprocess.run(
+    #         ["node", str(_GENERATOR_SCRIPT), tmp_path, str(out_path)],
+    #         capture_output=True, text=True, timeout=30,
+    #     )
+    #     if result.returncode != 0:
+    #         raise RuntimeError(result.stderr or result.stdout)
+    # except subprocess.TimeoutExpired:
+    #     raise HTTPException(status_code=504, detail="Document generation timed out.")
+    # except Exception as exc:
+    #     log.exception("DOCX generation failed")
+    #     raise HTTPException(status_code=500, detail=f"DOCX generation failed: {exc}")
+    # finally:
+    #     os.unlink(tmp_path)
+
+    # if not out_path.exists():
+    #     raise HTTPException(status_code=500, detail="DOCX file was not created.")
+
+    # safe_title = re.sub(r'[^\w\s-]', '', meta_info["title"])[:60].strip()
+    # filename   = f"{safe_title} — Study Notes.docx" if safe_title else "Study Notes.docx"
+
+    # return FileResponse(
+    #     str(out_path),
+    #     media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    #     filename=filename,
+    # )
+    # ── Python DOCX generator ───────────────
     export_dir = Path("exports")
     export_dir.mkdir(exist_ok=True)
+
     out_path = export_dir / f"{video_id}_notes.docx"
 
-    with tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False, encoding="utf-8") as tmp:
-        json.dump(payload, tmp, ensure_ascii=False)
-        tmp_path = tmp.name
-
     try:
-        result = subprocess.run(
-            ["node", str(_GENERATOR_SCRIPT), tmp_path, str(out_path)],
-            capture_output=True, text=True, timeout=30,
-        )
-        if result.returncode != 0:
-            raise RuntimeError(result.stderr or result.stdout)
-    except subprocess.TimeoutExpired:
-        raise HTTPException(status_code=504, detail="Document generation timed out.")
+        generate_docx_from_payload(payload, str(out_path))
     except Exception as exc:
         log.exception("DOCX generation failed")
         raise HTTPException(status_code=500, detail=f"DOCX generation failed: {exc}")
-    finally:
-        os.unlink(tmp_path)
-
-    if not out_path.exists():
-        raise HTTPException(status_code=500, detail="DOCX file was not created.")
-
     safe_title = re.sub(r'[^\w\s-]', '', meta_info["title"])[:60].strip()
     filename   = f"{safe_title} — Study Notes.docx" if safe_title else "Study Notes.docx"
 
