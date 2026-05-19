@@ -2,7 +2,7 @@
 
 Paste a YouTube URL, upload audio or video, or drop a Word document. Cognira builds transcript intelligence and gives you instant answers, chapters, quizzes, and exportable notes.
 
-> A production-grade, AI platform with persistent conversations, intelligent context handling, and a high-performance UI — built from scratch with custom architecture and real-world scalability in mind.
+> An AI-powered content intelligence platform — users can query any video, audio, or document using RAG with hybrid retrieval and get cited, hallucination-guarded answers.
 
 ---
 

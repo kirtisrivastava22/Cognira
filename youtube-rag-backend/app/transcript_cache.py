@@ -1,6 +1,4 @@
 """
-transcript_cache.py  (production rewrite)
-------------------------------------------
 Transcript caching via SQLite (app.database).
 File-based JSON cache is retained as fallback for migration compatibility.
 """

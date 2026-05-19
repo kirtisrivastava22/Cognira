@@ -1,6 +1,4 @@
 """
-rate_limiter.py
----------------
 Lightweight in-process rate limiter using a sliding-window counter.
 
 Suitable for single-process deployments (one Uvicorn worker).

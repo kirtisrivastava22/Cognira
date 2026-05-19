@@ -1,6 +1,4 @@
 """
-transcript_service.py
----------------------
 Handles Whisper transcription for uploaded / direct-URL media.
 
 Caching strategy (two layers):

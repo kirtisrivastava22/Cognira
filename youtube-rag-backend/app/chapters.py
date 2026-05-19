@@ -1,6 +1,4 @@
 """
-chapters.py
------------
 Detects logical chapters from any transcript (YouTube, audio upload, etc.)
 
 Design goals:

@@ -1,6 +1,4 @@
 """
-quiz.py
--------
 Generates multiple-choice quizzes from video transcripts.
 
 Design goals:

@@ -1,6 +1,4 @@
 """
-docx_reader.py
---------------
 Reads an uploaded .docx file and converts it to LangChain Documents.
 
 Design goals:

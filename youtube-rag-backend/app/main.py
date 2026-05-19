@@ -1,16 +1,3 @@
-"""
-main.py  — Cognira API (production)
-------------------------------------
-Changes over dev version:
-  • SQLite DB via app.database (replaces JSON index + transcript files)
-  • /auth/signin, /auth/signout endpoints
-  • /history GET/POST endpoints (server-side, per-user)
-  • YouTube timestamp seek fix (postMessage via /seek endpoint for iframe)
-  • Chapters / Quiz now cache results in DB (no re-generation on repeat calls)
-  • CORS locked to configured origins in production
-  • Rate limiter on all heavy endpoints
-"""
-
 from __future__ import annotations
 
 import json
@@ -21,8 +8,9 @@ import re
 import time
 from contextlib import asynccontextmanager
 from pathlib import Path
+from typing import Literal, Optional
 
-from fastapi import Depends, FastAPI, File, Form, HTTPException, Request, UploadFile
+from fastapi import Cookie, Depends, FastAPI, File, Form, HTTPException, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 from pydantic import BaseModel, field_validator
@@ -33,7 +21,14 @@ from langchain_core.output_parsers import StrOutputParser
 
 from app.database import (
     init_db, save_media, get_media,
-    upsert_user, add_history, get_history,
+    register_user, authenticate_user, upsert_user,
+    get_user_by_id,
+    create_session_token, validate_session_token, revoke_session_token,
+    add_history, get_history,
+    create_conversation, get_conversation, get_conversation_by_token,
+    list_conversations, append_messages, rename_conversation,
+    pin_conversation, delete_conversation,
+    generate_share_token, revoke_share_token,
 )
 from app.export import router as export_router
 from app.chapters import detect_chapters, detect_chapters_from_docs
@@ -58,12 +53,6 @@ from app.media_manager import (
 from app.transcript_service import load_media_docs
 from app.vectorstore import get_or_create_vectorstore
 from app.docx_reader import load_docx_docs, WordLimitExceeded
-from app.database import (
-          create_conversation, get_conversation, get_conversation_by_token,
-          list_conversations, append_messages, rename_conversation,
-          pin_conversation, delete_conversation,
-          generate_share_token, revoke_share_token,
-      )
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Logging
@@ -76,20 +65,29 @@ logging.basicConfig(
 )
 log = logging.getLogger("main")
 
-
 # ─────────────────────────────────────────────────────────────────────────────
-# Constants
+# Config
 # ─────────────────────────────────────────────────────────────────────────────
 
 MAX_UPLOAD_BYTES = 50 * 1024 * 1024
-DOCX_MIME_TYPES = {
+DOCX_MIME_TYPES  = {
     "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
     "application/msword",
 }
 ALLOWED_EXTENSIONS = {".mp4", ".mp3", ".wav", ".mkv", ".m4a", ".webm", ".docx", ".doc"}
+ALLOWED_ORIGINS = [
+    o.strip()
+    for o in os.getenv(
+        "ALLOWED_ORIGINS",
+        "http://localhost:5173,http://127.0.0.1:5173,http://localhost:3000,http://127.0.0.1:3000",
+    ).split(",")
+    if o.strip()
+]
 
-# In production, lock this to your actual domain(s)
-ALLOWED_ORIGINS = os.getenv("ALLOWED_ORIGINS", "*").split(",")
+# Set HTTPS_ONLY=1 in production to enable Secure + SameSite=None cookies
+HTTPS_ONLY     = os.getenv("HTTPS_ONLY", "0") == "1"
+COOKIE_NAME    = "cognira_session"
+COOKIE_MAX_AGE = 60 * 60 * 24 * 30   # 30 days in seconds
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -101,7 +99,7 @@ async def lifespan(app: FastAPI):
     log.info("Starting Cognira API…")
     for d in ("exports", "vectorstores", "media", "cache/transcripts"):
         Path(d).mkdir(parents=True, exist_ok=True)
-    init_db()   # create SQLite tables
+    init_db()
     log.info("Startup complete.")
     yield
     log.info("Shutting down…")
@@ -111,19 +109,19 @@ async def lifespan(app: FastAPI):
 # App
 # ─────────────────────────────────────────────────────────────────────────────
 
-app = FastAPI(title="Cognira API", version="3.0.0", lifespan=lifespan)
+app = FastAPI(title="Cognira API", version="4.0.0", lifespan=lifespan)
 
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=ALLOWED_ORIGINS,
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
-
+# ── IMPORTANT: middleware is applied in REVERSE registration order by Starlette.
+# CORSMiddleware must be added LAST so it runs FIRST and handles OPTIONS
+# preflight before any custom middleware can return a 4xx.
+#
+# Custom middlewares registered first (run last in the chain):
 
 @app.middleware("http")
 async def limit_upload_size(request: Request, call_next):
+    # Skip size check for OPTIONS preflight — no body expected
+    if request.method == "OPTIONS":
+        return await call_next(request)
     cl = request.headers.get("content-length")
     if cl and int(cl) > MAX_UPLOAD_BYTES:
         return JSONResponse(
@@ -143,62 +141,218 @@ async def log_requests(request: Request, call_next):
     return response
 
 
+# CORSMiddleware added LAST so it wraps everything and handles OPTIONS first:
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=ALLOWED_ORIGINS,
+    allow_credentials=True,   # required for cookies
+    allow_methods=["*"],
+    allow_headers=["*"],
+    expose_headers=["Set-Cookie"],
+)
+
+app.include_router(export_router)
+
+
 # ─────────────────────────────────────────────────────────────────────────────
 # Health
 # ─────────────────────────────────────────────────────────────────────────────
 
 @app.get("/health", tags=["ops"])
 def health():
-    return {"status": "ok", "version": "3.0.0"}
+    return {"status": "ok", "version": "4.0.0"}
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Cookie helpers
+# ─────────────────────────────────────────────────────────────────────────────
+
+def _set_session_cookie(response: JSONResponse, token: str):
+    response.set_cookie(
+        key=COOKIE_NAME,
+        value=token,
+        max_age=COOKIE_MAX_AGE,
+        httponly=True,               # JS cannot read this cookie
+        samesite="lax",              # CSRF protection
+        secure=HTTPS_ONLY,           # True in prod (HTTPS only)
+        path="/",
+    )
+
+
+def _clear_session_cookie(response: JSONResponse):
+    response.delete_cookie(COOKIE_NAME, path="/")
+
+
+def _get_session_token(request: Request) -> Optional[str]:
+    """Extract token from cookie or Authorization: Bearer header."""
+    token = request.cookies.get(COOKIE_NAME)
+    if not token:
+        auth = request.headers.get("Authorization", "")
+        if auth.startswith("Bearer "):
+            token = auth[7:].strip()
+    return token or None
+
+
+def _require_user(request: Request) -> dict:
+    """FastAPI dependency — returns user dict or raises 401."""
+    token = _get_session_token(request)
+    if not token:
+        raise HTTPException(status_code=401, detail="Not authenticated.")
+    user = validate_session_token(token)
+    if not user:
+        raise HTTPException(status_code=401, detail="Session expired. Please log in again.")
+    return user
 
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Auth endpoints
 # ─────────────────────────────────────────────────────────────────────────────
 
+class RegisterRequest(BaseModel):
+    name:     str
+    email:    str
+    password: str
+
+    @field_validator("email")
+    @classmethod
+    def _ve(cls, v):
+        v = v.strip().lower()
+        if "@" not in v or len(v) < 5:
+            raise ValueError("Invalid email address.")
+        return v
+
+    @field_validator("name")
+    @classmethod
+    def _vn(cls, v):
+        v = v.strip()
+        if not v:
+            raise ValueError("Name is required.")
+        return v[:200]
+
+    @field_validator("password")
+    @classmethod
+    def _vp(cls, v):
+        if len(v) < 8:
+            raise ValueError("Password must be at least 8 characters.")
+        return v
+
+
+class LoginRequest(BaseModel):
+    email:    str
+    password: str
+
+
+@app.post("/auth/register", tags=["auth"])
+def auth_register(req: RegisterRequest):
+    """
+    Create a new account.
+    Returns user + sets a 30-day httpOnly session cookie.
+    """
+    try:
+        user = register_user(req.name, req.email, req.password)
+    except ValueError as e:
+        raise HTTPException(status_code=409, detail=str(e))
+
+    token    = create_session_token(user["user_id"])
+    history  = get_history(user["user_id"], limit=50)
+    response = JSONResponse(content={**user, "history": history})
+    _set_session_cookie(response, token)
+    return response
+
+
+@app.post("/auth/login", tags=["auth"])
+def auth_login(req: LoginRequest):
+    """
+    Verify credentials.
+    Returns user + sets a 30-day httpOnly session cookie.
+    Fast: single DB lookup + bcrypt verify.
+    """
+    try:
+        user = authenticate_user(req.email, req.password)
+    except ValueError as e:
+        # Same HTTP status for wrong pw and unknown email — prevents user enumeration
+        raise HTTPException(status_code=401, detail=str(e))
+
+    token    = create_session_token(user["user_id"])
+    history  = get_history(user["user_id"], limit=50)
+    response = JSONResponse(content={**user, "history": history})
+    _set_session_cookie(response, token)
+    return response
+
+
+@app.get("/auth/me", tags=["auth"])
+def auth_me(request: Request):
+    """
+    Fast session-restore endpoint.
+    Frontend calls this on page load; if the cookie is valid it gets the full
+    user + history in one request — no password round-trip.
+    Returns 401 if no valid session (frontend should show login page).
+    """
+    token = _get_session_token(request)
+    if not token:
+        raise HTTPException(status_code=401, detail="Not authenticated.")
+    user = validate_session_token(token)
+    if not user:
+        raise HTTPException(status_code=401, detail="Session expired.")
+    history = get_history(user["user_id"], limit=50)
+    return {**user, "history": history}
+
+
+@app.post("/auth/logout", tags=["auth"])
+def auth_logout(request: Request):
+    """
+    Revoke server-side token and clear the cookie.
+    """
+    token = _get_session_token(request)
+    if token:
+        revoke_session_token(token)
+    response = JSONResponse(content={"ok": True})
+    _clear_session_cookie(response)
+    return response
+
+
+# Legacy sign-in kept for backward-compat (e.g. existing frontend builds)
 class SignInRequest(BaseModel):
     name:  str
     email: str
 
     @field_validator("email")
     @classmethod
-    def _clean_email(cls, v: str) -> str:
+    def _ce(cls, v):
         v = v.strip().lower()
-        if not v or "@" not in v:
+        if "@" not in v:
             raise ValueError("Invalid email")
         return v
 
     @field_validator("name")
     @classmethod
-    def _clean_name(cls, v: str) -> str:
-        v = v.strip()
-        if not v:
-            raise ValueError("Name required")
-        return v[:200]
+    def _cn(cls, v):
+        return v.strip()[:200]
 
 
 @app.post("/auth/signin", tags=["auth"])
-def sign_in(req: SignInRequest):
+def sign_in_legacy(req: SignInRequest):
     """
-    Lightweight auth — no passwords, just name+email identity.
-    Returns a user_id to be stored client-side (localStorage / cookie).
+    Passwordless legacy sign-in — kept for compatibility.
+    New clients should use /auth/register + /auth/login.
     """
-    user_id = (
-        req.email.lower().replace(r"[^a-z0-9]", "_") + "_" +
-        req.name.lower().replace(" ", "_")[:20]
-    )
-    # Deterministic: same email+name always gives same ID
     import hashlib
     user_id = hashlib.sha256(f"{req.email}:{req.name}".encode()).hexdigest()[:32]
-
     upsert_user(user_id, req.name, req.email)
-    return {"user_id": user_id, "name": req.name, "email": req.email}
+    token    = create_session_token(user_id)
+    response = JSONResponse(content={"user_id": user_id, "name": req.name, "email": req.email})
+    _set_session_cookie(response, token)
+    return response
 
 
 @app.post("/auth/signout", tags=["auth"])
-def sign_out():
-    """Client clears its stored user_id. Server does nothing (stateless)."""
-    return {"ok": True}
+def sign_out_legacy(request: Request):
+    token = _get_session_token(request)
+    if token:
+        revoke_session_token(token)
+    response = JSONResponse(content={"ok": True})
+    _clear_session_cookie(response)
+    return response
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -234,17 +388,15 @@ class AskRequest(BaseModel):
 
     @field_validator("video_id")
     @classmethod
-    def _clean_id(cls, v: str) -> str:
+    def _clean_id(cls, v):
         v = v.strip()
-        if not v:
-            raise ValueError("video_id must not be empty")
-        if len(v) > 128:
-            raise ValueError("video_id too long")
+        if not v or len(v) > 128:
+            raise ValueError("Invalid video_id")
         return v
 
     @field_validator("question")
     @classmethod
-    def _clean_q(cls, v: str) -> str:
+    def _clean_q(cls, v):
         v = v.strip()
         if not v:
             raise ValueError("question must not be empty")
@@ -282,7 +434,6 @@ def _vectorstore_exists_on_disk(media_id: str) -> bool:
 def _build_docs(media_id: str):
     if _vectorstore_exists_on_disk(media_id):
         return []
-
     meta = get_media_meta(media_id)
     if meta:
         if meta.get("source_type") == "docx":
@@ -291,7 +442,6 @@ def _build_docs(media_id: str):
         docs = load_media_docs(media_id)
         if docs:
             return split_documents(docs)
-
     return split_documents(load_youtube_docs(media_id))
 
 
@@ -374,8 +524,8 @@ async def ask_stream(req: AskRequest):
 
         answer_text = ""
         for token in chain.stream({
-            "history": history_text.strip() or "(none)",
-            "context": context,
+            "history":  history_text.strip() or "(none)",
+            "context":  context,
             "question": req.question,
         }):
             answer_text += token
@@ -393,11 +543,16 @@ async def ask_stream(req: AskRequest):
         token_generator(),
         media_type="text/event-stream",
         headers={
-            "Cache-Control":    "no-cache",
-            "Connection":       "keep-alive",
+            "Cache-Control":     "no-cache",
+            "Connection":        "keep-alive",
             "X-Accel-Buffering": "no",
         },
     )
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Conversation endpoints
+# ─────────────────────────────────────────────────────────────────────────────
 
 class ConvCreateRequest(BaseModel):
     user_id:  str
@@ -407,7 +562,7 @@ class ConvCreateRequest(BaseModel):
 
 class ConvAppendRequest(BaseModel):
     conv_id:  str
-    messages: list[dict]          # [{question, answer}, ...]
+    messages: list[dict]
 
 
 class ConvRenameRequest(BaseModel):
@@ -418,24 +573,18 @@ class ConvPinRequest(BaseModel):
     pinned: bool
 
 
-# ── Routes ─────────────────────────────────────────────────────────────────
-
 @app.post("/conversations", tags=["conversations"])
 def conv_create(req: ConvCreateRequest):
-    """Create a new empty conversation."""
-    conv = create_conversation(req.user_id, req.media_id, req.title)
-    return conv
+    return create_conversation(req.user_id, req.media_id, req.title)
 
 
 @app.get("/conversations/{user_id}", tags=["conversations"])
 def conv_list(user_id: str, media_id: str | None = None):
-    """List all conversations for a user (optionally filtered by media_id)."""
     return {"conversations": list_conversations(user_id, media_id)}
 
 
 @app.get("/conversation/{conv_id}", tags=["conversations"])
 def conv_get(conv_id: str):
-    """Get a single conversation by ID."""
     conv = get_conversation(conv_id)
     if not conv:
         raise HTTPException(status_code=404, detail="Conversation not found")
@@ -444,7 +593,6 @@ def conv_get(conv_id: str):
 
 @app.post("/conversations/{conv_id}/messages", tags=["conversations"])
 def conv_append(conv_id: str, req: ConvAppendRequest):
-    """Append Q&A turns to a conversation (call after each answer)."""
     conv = append_messages(conv_id, req.messages)
     if not conv:
         raise HTTPException(status_code=404, detail="Conversation not found")
@@ -469,40 +617,35 @@ def conv_pin(conv_id: str, req: ConvPinRequest):
 
 @app.delete("/conversations/{conv_id}", tags=["conversations"])
 def conv_delete(conv_id: str):
-    ok = delete_conversation(conv_id)
-    if not ok:
+    if not delete_conversation(conv_id):
         raise HTTPException(status_code=404, detail="Conversation not found")
     return {"ok": True}
 
 
 @app.post("/conversations/{conv_id}/share", tags=["conversations"])
 def conv_share(conv_id: str):
-    """Generate a public share token for this conversation."""
     token = generate_share_token(conv_id)
     if token is None:
         raise HTTPException(status_code=404, detail="Conversation not found")
-    share_url = f"/shared/{token}"
-    return {"share_token": token, "share_url": share_url}
+    return {"share_token": token, "share_url": f"/shared/{token}"}
 
 
 @app.delete("/conversations/{conv_id}/share", tags=["conversations"])
 def conv_unshare(conv_id: str):
-    """Revoke the share token."""
-    ok = revoke_share_token(conv_id)
-    if not ok:
+    if not revoke_share_token(conv_id):
         raise HTTPException(status_code=404, detail="Conversation not found")
     return {"ok": True}
 
 
 @app.get("/shared/{share_token}", tags=["conversations"])
 def conv_shared_view(share_token: str):
-    """Public endpoint — fetch shared conversation by token."""
     conv = get_conversation_by_token(share_token)
     if not conv:
-        raise HTTPException(status_code=404, detail="Shared conversation not found or link revoked")
-    # Strip private fields before returning
+        raise HTTPException(status_code=404, detail="Shared conversation not found or revoked")
     conv.pop("user_id", None)
     return conv
+
+
 # ─────────────────────────────────────────────────────────────────────────────
 # Ingest
 # ─────────────────────────────────────────────────────────────────────────────
@@ -559,8 +702,7 @@ async def ingest_media(
 
             word_count = docx_meta["word_count"]
             truncated  = docx_meta["truncated"]
-
-            chunks = split_documents(docs)
+            chunks     = split_documents(docs)
             try:
                 get_or_create_vectorstore(media_id, docs_builder=lambda _: chunks)
             except Exception as e:
@@ -591,7 +733,7 @@ async def ingest_media(
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Media / Doc endpoints
+# Media / Doc
 # ─────────────────────────────────────────────────────────────────────────────
 
 @app.get("/media/{media_id}")
@@ -615,22 +757,18 @@ def get_doc(media_id: str):
     meta = get_media_meta(media_id)
     if not meta:
         raise HTTPException(status_code=404, detail="Document not found")
-
     if "full_text" in meta and meta["full_text"]:
         return {"text": meta["full_text"]}
-
     if meta.get("source_type") == "docx":
         try:
             docs, _ = load_docx_docs(meta.get("local_path", ""))
             full_text = "\n\n".join(d.page_content for d in docs)
-            # Cache it back
             meta["full_text"] = full_text
             save_media(meta)
             return {"text": full_text}
         except Exception as e:
             raise HTTPException(status_code=500, detail=f"Failed to load document: {e}")
-
-    raise HTTPException(status_code=400, detail=f"Not a document source.")
+    raise HTTPException(status_code=400, detail="Not a document source.")
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -645,16 +783,16 @@ def get_chapters(video_id: str):
             docs, _ = load_docx_docs(meta.get("local_path", ""))
         except Exception:
             docs = []
-        result = detect_chapters_from_docs(docs, media_id=video_id, window_sec=80)
-        return result.to_dict()
+        return detect_chapters_from_docs(docs, media_id=video_id, window_sec=80).to_dict()
     return detect_chapters(video_id)
 
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Quiz
 # ─────────────────────────────────────────────────────────────────────────────
-from typing import Literal
+
 Difficulty = Literal["easy", "medium", "hard"]
+
 
 @app.get("/quiz/{video_id}", dependencies=[Depends(rate_limit("quiz"))])
 def get_quiz(video_id: str, num_questions: int = 5, difficulty: Difficulty = "medium"):
@@ -665,11 +803,4 @@ def get_quiz(video_id: str, num_questions: int = 5, difficulty: Difficulty = "me
         except Exception:
             docs = []
         return generate_quiz_from_docs(docs, video_id, num_questions, difficulty).to_dict()
-    return generate_quiz(video_id, num_questions, difficulty)  
-
-
-# ─────────────────────────────────────────────────────────────────────────────
-# Export
-# ─────────────────────────────────────────────────────────────────────────────
-
-app.include_router(export_router)
+    return generate_quiz(video_id, num_questions, difficulty)

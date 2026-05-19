@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect, useCallback } from "react";
+import React, { useState, useRef, useEffect } from "react";
 
 const API = import.meta.env.VITE_API_URL || "http://127.0.0.1:8000";
 
@@ -53,7 +53,7 @@ export default function AskQuestion({
       setActiveConvId(convId);
       loadConversation(convId);
     }
-  }, [convId]);
+  }, [activeConvId,convId]);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });

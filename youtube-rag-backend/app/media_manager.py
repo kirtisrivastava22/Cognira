@@ -1,6 +1,4 @@
 """
-media_manager.py  (production rewrite)
----------------------------------------
 All metadata now stored in SQLite via app.database.
 File I/O only for actual media files.
 """

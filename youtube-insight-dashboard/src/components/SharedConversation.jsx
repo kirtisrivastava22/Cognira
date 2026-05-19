@@ -60,7 +60,7 @@ export default function SharedConversation() {
 
   const messages = data?.messages || [];
   const title    = data?.title || "Shared conversation";
-  const mediaId  = data?.media_id;
+  // const mediaId  = data?.media_id;
 
   return (
     <div className="page-grid">

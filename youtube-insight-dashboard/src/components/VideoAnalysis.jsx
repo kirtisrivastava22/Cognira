@@ -176,7 +176,10 @@ function DocxViewer({ mediaId }) {
       const pos = rem.toLowerCase().indexOf(q);
       if (pos === -1) { parts.push(rem); break; }
       if (pos > 0) parts.push(rem.slice(0, pos));
-      const gi    = matches.findIndex(m => m.pi === pi && m.pos === off + pos);
+      const currentOff = off;
+      const gi = matches.findIndex(
+        m => m.pi === pi && m.pos === currentOff + pos
+      );
       const focus = gi === matchIndex;
       parts.push(
         <mark key={`${pi}-${off+pos}`} style={{

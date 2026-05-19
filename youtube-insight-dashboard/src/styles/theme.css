@@ -290,6 +290,7 @@ body {
 /* ── Buttons ─────────────────────────────────────────────────── */
 .btn {
   display: inline-flex;
+  margin-left:8px;
   align-items: center;
   gap: 7px;
   padding: 9px 20px;
@@ -341,8 +342,8 @@ body {
   border: 1px solid rgba(248,113,113,0.25);
 }
 
-.btn-sm { padding: 6px 14px; font-size: 12.5px; }
-.btn-lg { padding: 12px 28px; font-size: 14.5px; }
+.btn-sm { margin-left:5px; padding: 6px 14px; font-size: 12.5px; }
+.btn-lg { margin-left:5px; padding: 12px 28px; font-size: 14.5px; }
 
 /* ── Inputs ──────────────────────────────────────────────────── */
 input, textarea, select {
@@ -392,6 +393,8 @@ select { cursor: pointer; }
 }
 
 .search-bar {
+  margin-top: 5px;
+  margin-bottom:5px;
   flex: 1;
 }
 
@@ -563,7 +566,7 @@ select { cursor: pointer; }
 .display { font-family: 'DM Serif Display', serif; font-size: 38px; line-height: 1.1; letter-spacing: -0.02em; color: var(--text-primary); }
 .display-sm { font-family: 'DM Serif Display', serif; font-size: 26px; line-height: 1.2; letter-spacing: -0.01em; }
 .heading { font-size: 18px; font-weight: 700; color: var(--text-primary); }
-.subheading { font-size: 13px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.08em; color: var(--text-tertiary); }
+.subheading { font-size: 13px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.08em; color: var(--text-secondary); }
 .body { font-size: 14px; line-height: 1.7; color: var(--text-secondary); }
 .caption { font-size: 12px; color: var(--text-tertiary); }
 .mono { font-family: 'DM Mono', monospace; font-size: 12.5px; }

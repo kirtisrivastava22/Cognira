@@ -65,7 +65,7 @@ const History = ({ videoHistory, setCurrentVideo }) => {
 
   const clearHistory = () => {
     if (window.confirm("Are you sure you want to clear all history?")) {
-      localStorage.removeItem("cognira_history_guest"); // ✅ fixed key
+      localStorage.removeItem("cognira_history_guest"); 
       window.location.reload();
     }
   };
@@ -87,7 +87,7 @@ const History = ({ videoHistory, setCurrentVideo }) => {
 
       {/* Controls */}
       <div className="glass-card pad-lg history-controls">
-        <div className="search-bar">
+        <div className="mt-5px mb-12 search-bar">
           <input
             type="text"
             className="input-field search-input"
@@ -109,7 +109,7 @@ const History = ({ videoHistory, setCurrentVideo }) => {
         <div className="glass-card pad-lg empty-state">
           <h3>No history yet</h3>
           <p>Sessions you analyze will appear here.</p>
-          <button className="btn-primary" onClick={() => navigate("/analyze")}>
+          <button className="btn btn-primary" onClick={() => navigate("/analyze")}>
             Analyze your first session
           </button>
         </div>

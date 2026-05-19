@@ -1,9 +1,4 @@
 /**
- * docx_generator.js
- *
- * Called by export.py:
- *   node docx_generator.js <payload_json_path> <output_docx_path>
- *
  * Reads the JSON payload, builds a designed DOCX, writes it to disk.
  */
 

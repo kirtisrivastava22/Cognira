@@ -1,6 +1,4 @@
 """
-export.py
----------
 Generates a professionally designed DOCX study-notes document.
 
 Supports:
