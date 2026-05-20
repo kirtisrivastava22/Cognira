@@ -7,7 +7,7 @@ import Sidebar from "./components/Sidebar";
 import SharedConversation from "./components/SharedConversation";
 import { useConversations } from "./components/useConversations";
 
-const API = process.env.VITE_API_URL;
+const API = process.env.REACT_APP_API_URL || "http://52.184.87.140:10000";
 
 // ─── tiny fetch wrapper that always sends cookies ──────────────────────────
 const apiFetch = (path, opts = {}) =>
