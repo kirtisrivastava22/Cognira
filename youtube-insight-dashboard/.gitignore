@@ -26,6 +26,6 @@ yarn-error.log*
 *.swp
 *.swo
 *~
-
+.env
 # OS
 Thumbs.db

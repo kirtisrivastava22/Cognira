@@ -7,12 +7,12 @@ import Sidebar from "./components/Sidebar";
 import SharedConversation from "./components/SharedConversation";
 import { useConversations } from "./components/useConversations";
 
-const API = import.meta.env.VITE_API_URL || "http://127.0.0.1:8000";
+const API = process.env.VITE_API_URL;
 
 // ─── tiny fetch wrapper that always sends cookies ──────────────────────────
 const apiFetch = (path, opts = {}) =>
   fetch(`${API}${path}`, {
-    credentials: "include",            // send httpOnly cookie on every request
+    // credentials: "include",            // send httpOnly cookie on every request
     headers: { "Content-Type": "application/json", ...(opts.headers || {}) },
     ...opts,
   });
