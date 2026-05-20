@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useMemo } from "react";
 import { NavLink, useNavigate } from "react-router-dom";
-const API = process.env.REACT_APP_API_URL || "http://52.184.87.140:10000";
+const API = process.env.REACT_APP_API_URL || "/api";
 
 const NAV = [
   { to: "/", icon: "⬡", label: "Home" },

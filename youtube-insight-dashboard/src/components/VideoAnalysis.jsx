@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef, useCallback } from "react";
 import AskQuestion from "./AskQuestion";
 import Chapters from "./Chapters";
 import Quiz from "./Quiz";
-const API = process.env.REACT_APP_API_URL || "http://52.184.87.140:10000";
+const API = process.env.REACT_APP_API_URL || "/api";
 
 const ALLOWED_MEDIA = [".mp4", ".mp3", ".wav", ".mkv", ".m4a", ".webm"];
 const ALLOWED_DOC   = [".docx", ".doc"];

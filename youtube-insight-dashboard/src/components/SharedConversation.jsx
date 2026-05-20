@@ -1,7 +1,6 @@
 import { useParams, Link } from "react-router-dom";
 import { useEffect, useState } from "react";
-
-const API = process.env.REACT_APP_API_URL || "http://52.184.87.140:10000";
+const API = process.env.REACT_APP_API_URL || "/api";
 
 // Reuse the same ref-rendering logic as AskQuestion
 const COMBINED_RE = /\[para(?:graph)?\s*(\d+)\]|\[(\d{1,2}):(\d{2})\]/gi;

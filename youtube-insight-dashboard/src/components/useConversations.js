@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
 
-const API = process.env.REACT_APP_API_URL || "http://52.184.87.140:10000";
+const API = process.env.REACT_APP_API_URL || "/api";
 
 export function useConversations(user, mediaId) {
   const [list,         setList]         = useState([]);

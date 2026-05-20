@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from "react";
 
-const API = process.env.REACT_APP_API_URL || "http://52.184.87.140:10000";
+const API = process.env.REACT_APP_API_URL || "/api";
 
 // Single-pass ref rendering: [para N] → teal button, [MM:SS] → amber button
 const COMBINED_RE = /\[para(?:graph)?\s*(\d+)\]|\[(\d{1,2}):(\d{2})\]/gi;
