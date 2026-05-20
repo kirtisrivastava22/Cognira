@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from "react";
 
-const API = import.meta.env.VITE_API_URL || "http://127.0.0.1:8000";
+const API = process.env.VITE_API_URL;
 
 // Single-pass ref rendering: [para N] → teal button, [MM:SS] → amber button
 const COMBINED_RE = /\[para(?:graph)?\s*(\d+)\]|\[(\d{1,2}):(\d{2})\]/gi;

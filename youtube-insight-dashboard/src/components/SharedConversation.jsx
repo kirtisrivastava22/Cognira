@@ -1,7 +1,7 @@
 import { useParams, Link } from "react-router-dom";
 import { useEffect, useState } from "react";
 
-const API = import.meta.env.VITE_API_URL || "http://127.0.0.1:3000";
+const API = process.env.VITE_API_URL;
 
 // Reuse the same ref-rendering logic as AskQuestion
 const COMBINED_RE = /\[para(?:graph)?\s*(\d+)\]|\[(\d{1,2}):(\d{2})\]/gi;

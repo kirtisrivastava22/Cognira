@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
 
-const API = import.meta.env.VITE_API_URL || "http://127.0.0.1:8000";
+const API = process.env.VITE_API_URL;
 
 export function useConversations(user, mediaId) {
   const [list,         setList]         = useState([]);
