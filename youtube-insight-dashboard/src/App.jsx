@@ -6,7 +6,7 @@ import History from "./components/History";
 import Sidebar from "./components/Sidebar";
 import SharedConversation from "./components/SharedConversation";
 import { useConversations } from "./components/useConversations";
-const API = process.env.REACT_APP_API_URL || "/api";
+const API = process.env.REACT_APP_API_URL;
 
 // ─── tiny fetch wrapper that always sends cookies ──────────────────────────
 const apiFetch = (path, opts = {}) =>

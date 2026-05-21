@@ -5,4 +5,4 @@ exports
 cache
 node_modules/
 media
-cognira.db
+./cognira.db

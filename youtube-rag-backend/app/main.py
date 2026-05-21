@@ -79,7 +79,7 @@ ALLOWED_ORIGINS = [
     o.strip()
     for o in os.getenv(
         "ALLOWED_ORIGINS",
-        "http://localhost:5173,http://127.0.0.1:5173,http://localhost:3000,http://127.0.0.1:3000",
+        "http://localhost:5173,http://127.0.0.1:5173,http://localhost:3000,http://127.0.0.1:3000,https://cognira-three.vercel.app",
     ).split(",")
     if o.strip()
 ]
@@ -116,6 +116,8 @@ app = FastAPI(title="Cognira API", version="4.0.0", lifespan=lifespan)
 # preflight before any custom middleware can return a 4xx.
 #
 # Custom middlewares registered first (run last in the chain):
+from dotenv import load_dotenv
+load_dotenv() 
 
 @app.middleware("http")
 async def limit_upload_size(request: Request, call_next):
@@ -144,11 +146,11 @@ async def log_requests(request: Request, call_next):
 # CORSMiddleware added LAST so it wraps everything and handles OPTIONS first:
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=ALLOWED_ORIGINS,
-    allow_credentials=True,   # required for cookies
+    allow_origins=["*"],
+    allow_credentials=False,   # required for cookies
     allow_methods=["*"],
     allow_headers=["*"],
-    expose_headers=["Set-Cookie"],
+    # expose_headers=["Set-Cookie"],
 )
 
 app.include_router(export_router)
@@ -173,11 +175,10 @@ def _set_session_cookie(response: JSONResponse, token: str):
         value=token,
         max_age=COOKIE_MAX_AGE,
         httponly=True,               # JS cannot read this cookie
-        samesite="lax",              # CSRF protection
+        samesite="none",              # CSRF protection
         secure=HTTPS_ONLY,           # True in prod (HTTPS only)
         path="/",
     )
-
 
 def _clear_session_cookie(response: JSONResponse):
     response.delete_cookie(COOKIE_NAME, path="/")
@@ -354,7 +355,40 @@ def sign_out_legacy(request: Request):
     _clear_session_cookie(response)
     return response
 
+@app.get("/transcript/{video_id}", tags=["transcript"])
+def get_transcript(video_id: str):
+    """
+    Fetch YouTube transcript via Supadata (no IP blocks).
+    Frontend calls this instead of YouTube directly.
+    """
+    import requests
+    api_key = os.getenv("SUPADATA_API_KEY", "")
+    if not api_key:
+        raise HTTPException(status_code=503, detail="Transcript service not configured.")
 
+    try:
+        res = requests.get(
+            "https://api.supadata.ai/v1/youtube/transcript",
+            params={"videoId": video_id, "text": False},
+            headers={"x-api-key": api_key},
+            timeout=15,
+        )
+        if not res.ok:
+            raise HTTPException(status_code=res.status_code, detail="Transcript unavailable.")
+        data = res.json()
+        # Normalize to [{"text": "...", "start": 123}, ...]
+        content = data.get("content", [])
+        transcript = [
+            {"text": item.get("text", "").strip(), "start": int(item.get("offset", 0) / 1000)}
+            for item in content
+            if item.get("text", "").strip()
+        ]
+        return {"transcript": transcript}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+    
 # ─────────────────────────────────────────────────────────────────────────────
 # History endpoints
 # ─────────────────────────────────────────────────────────────────────────────
@@ -375,7 +409,6 @@ def user_history(user_id: str, limit: int = 50):
 def add_history_entry(req: HistoryAddRequest):
     add_history(req.user_id, req.media_id, req.title, req.source_type)
     return {"ok": True}
-
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Request models
@@ -731,7 +764,139 @@ async def ingest_media(
         title=meta.get("title"), word_count=word_count, truncated=truncated,
     )
 
+# ─────────────────────────────────────────────────────────────────────────────
+# ADD THESE TWO ENDPOINTS TO app/main.py
+# Place them right after the existing /ingest endpoint
+# ─────────────────────────────────────────────────────────────────────────────
 
+# ── 1. Ingest pre-fetched transcript (sent from browser) ──────────────────
+#
+# The frontend fetches the YouTube transcript using the user's own IP
+# (never blocked), then POSTs it here. We build the vectorstore from
+# the provided text — no YouTube API call needed server-side.
+
+class IngestTextRequest(BaseModel):
+    video_id:   str
+    transcript: list[dict]   # [{"text": "...", "start": 123}, ...]
+    title:      str | None = None
+
+    @field_validator("video_id")
+    @classmethod
+    def _clean(cls, v):
+        v = v.strip()
+        if not v or len(v) > 128:
+            raise ValueError("Invalid video_id")
+        return v
+
+
+@app.post("/ingest_text", tags=["ingest"])
+def ingest_text(req: IngestTextRequest):
+    """
+    Receive a pre-fetched transcript from the browser and build a vectorstore.
+    Called after the frontend fetches the YouTube transcript using the user's IP.
+    Idempotent — safe to call multiple times for the same video_id.
+    """
+    from langchain_core.documents import Document
+
+    # Skip if vectorstore already exists
+    if _vectorstore_exists_on_disk(req.video_id):
+        log.info("Vectorstore already exists for %s — skipping rebuild", req.video_id)
+        return {"ok": True, "media_id": req.video_id, "chunks": 0, "cached": True}
+
+    if not req.transcript:
+        raise HTTPException(status_code=400, detail="Transcript is empty.")
+
+    # Build docs from provided transcript
+    docs = [
+        Document(
+            page_content=item["text"].replace("\n", " ").strip(),
+            metadata={"start": int(item.get("start", 0))},
+        )
+        for item in req.transcript
+        if item.get("text", "").strip()
+    ]
+
+    if not docs:
+        raise HTTPException(status_code=400, detail="No usable text in transcript.")
+
+    # Save to transcript cache so /ask_stream fallback also finds it
+    from app.transcript_cache import save_transcript
+    save_transcript(req.video_id, [{"text": d.page_content, "start": d.metadata["start"]} for d in docs])
+
+    chunks = split_documents(docs)
+    try:
+        get_or_create_vectorstore(req.video_id, docs_builder=lambda _: chunks)
+    except Exception as e:
+        log.exception("Vectorstore build failed for %s", req.video_id)
+        raise HTTPException(status_code=500, detail=f"Vectorstore build failed: {e}")
+
+    # Register in media DB
+    register_media(req.video_id, {
+        "media_id":    req.video_id,
+        "source_type": "youtube",
+        "source_url":  f"https://www.youtube.com/watch?v={req.video_id}",
+        "local_path":  None,
+        "title":       req.title or req.video_id,
+    })
+
+    log.info("Built vectorstore for %s from browser transcript (%d chunks)", req.video_id, len(chunks))
+    return {"ok": True, "media_id": req.video_id, "chunks": len(chunks), "cached": False}
+
+
+# ── 2. Retrieve relevant docs (vectorstore query) ────────────────────────
+#
+# The frontend calls this to get relevant context, then sends it directly
+# to Groq using the user's own API key. The LLM call never touches the server.
+
+class RetrieveRequest(BaseModel):
+    video_id: str
+    question: str
+    k:        int = 14
+
+    @field_validator("video_id")
+    @classmethod
+    def _clean_id(cls, v):
+        v = v.strip()
+        if not v or len(v) > 128:
+            raise ValueError("Invalid video_id")
+        return v
+
+    @field_validator("question")
+    @classmethod
+    def _clean_q(cls, v):
+        v = v.strip()
+        if not v:
+            raise ValueError("question must not be empty")
+        if len(v) > 2000:
+            raise ValueError("question too long (max 2000 chars)")
+        return v
+
+
+@app.post("/retrieve", tags=["rag"])
+def retrieve_docs(req: RetrieveRequest):
+    """
+    Retrieve relevant document chunks from the vectorstore.
+    Returns serializable doc list — the browser uses these as context
+    for its direct Groq API call.
+    """
+    db = get_or_create_vectorstore(req.video_id, docs_builder=_build_docs)
+
+    if db is None:
+        return {"docs": [], "video_id": req.video_id}
+
+    docs = hybrid_retrieve(db, req.question, k=req.k)
+    docs = rerank_docs_by_timestamp_density(docs)
+
+    # Serialize for JSON response
+    serialized = [
+        {
+            "page_content": doc.page_content,
+            "metadata":     doc.metadata,
+        }
+        for doc in docs
+    ]
+
+    return {"docs": serialized, "video_id": req.video_id}
 # ─────────────────────────────────────────────────────────────────────────────
 # Media / Doc
 # ─────────────────────────────────────────────────────────────────────────────

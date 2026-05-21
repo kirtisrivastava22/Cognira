@@ -1,8 +1,9 @@
 import React, { useState, useEffect, useRef, useCallback } from "react";
 import AskQuestion from "./AskQuestion";
+import ApiKeyModal from "./ApiKeyModal";
 import Chapters from "./Chapters";
 import Quiz from "./Quiz";
-const API = process.env.REACT_APP_API_URL || "/api";
+const API = process.env.REACT_APP_API_URL;
 
 const ALLOWED_MEDIA = [".mp4", ".mp3", ".wav", ".mkv", ".m4a", ".webm"];
 const ALLOWED_DOC   = [".docx", ".doc"];
@@ -17,18 +18,27 @@ function extractYouTubeId(url) {
   return null;
 }
 
-/* ── YouTube player with postMessage seek ─────────────────────── */
+async function fetchYouTubeTranscript(videoId) {
+  try {
+    const res = await fetch(`${API}/transcript/${videoId}`);
+    if (!res.ok) return null;
+    const data = await res.json();
+    return data.transcript || null;
+  } catch (e) {
+    console.warn("Transcript fetch failed:", e.message);
+    return null;
+  }
+}
+
+/* ── YouTube player ───────────────────────────────────────────── */
 function YouTubePlayer({ videoId }) {
   const iframeRef = useRef(null);
-
-  // Listen for seek events and relay via postMessage
   useEffect(() => {
     const handler = (e) => {
       if (e.detail?.videoId !== videoId) return;
       const sec = e.detail?.seconds ?? 0;
       iframeRef.current?.contentWindow?.postMessage(
-        JSON.stringify({ event: "command", func: "seekTo", args: [sec, true] }),
-        "*"
+        JSON.stringify({ event: "command", func: "seekTo", args: [sec, true] }), "*"
       );
     };
     window.addEventListener("cognira:seek", handler);
@@ -51,11 +61,10 @@ function YouTubePlayer({ videoId }) {
   );
 }
 
-/* ── Uploaded media player with currentTime seek ──────────────── */
+/* ── Uploaded media player ────────────────────────────────────── */
 function MediaPlayer({ videoId, title }) {
   const mediaRef = useRef(null);
   const isAudio  = /\.(mp3|wav|m4a)$/i.test(title || "");
-
   useEffect(() => {
     const handler = (e) => {
       if (e.detail?.videoId !== videoId) return;
@@ -66,7 +75,6 @@ function MediaPlayer({ videoId, title }) {
   }, [videoId]);
 
   const src = `${API}/media/${videoId}`;
-
   if (isAudio) {
     return (
       <div className="player-wrap" style={{ padding: "20px 24px", background: "var(--bg-elevated)" }}>
@@ -83,7 +91,6 @@ function MediaPlayer({ videoId, title }) {
       </div>
     );
   }
-
   return (
     <div className="player-wrap">
       <video ref={mediaRef} controls width="100%" style={{ display: "block", maxHeight: 420 }}>
@@ -93,7 +100,7 @@ function MediaPlayer({ videoId, title }) {
   );
 }
 
-/* ── DOCX viewer with para navigation + search ────────────────── */
+/* ── DOCX viewer ──────────────────────────────────────────────── */
 function DocxViewer({ mediaId }) {
   const [paragraphs,    setParagraphs]    = useState([]);
   const [loading,       setLoading]       = useState(true);
@@ -109,10 +116,7 @@ function DocxViewer({ mediaId }) {
     setLoading(true);
     fetch(`${API}/doc/${mediaId}`)
       .then(r => r.json())
-      .then(d => {
-        const ps = (d.text || "").split(/\n\n+/).filter(p => p.trim().length > 0);
-        setParagraphs(ps);
-      })
+      .then(d => setParagraphs((d.text || "").split(/\n\n+/).filter(p => p.trim().length > 0)))
       .catch(() => setParagraphs(["⚠️ Failed to load document."]))
       .finally(() => setLoading(false));
   }, [mediaId]);
@@ -136,10 +140,7 @@ function DocxViewer({ mediaId }) {
   }, []);
 
   useEffect(() => {
-    const handler = (e) => {
-      const idx = Number(e.detail?.paragraph ?? -1);
-      if (idx >= 0) goToPara(idx);
-    };
+    const handler = (e) => { const idx = Number(e.detail?.paragraph ?? -1); if (idx >= 0) goToPara(idx); };
     window.addEventListener("cognira:para", handler);
     return () => window.removeEventListener("cognira:para", handler);
   }, [goToPara]);
@@ -162,9 +163,7 @@ function DocxViewer({ mediaId }) {
   }, [searchQuery, paragraphs]);
 
   useEffect(() => { setMatchIndex(0); }, [searchQuery]);
-  useEffect(() => {
-    if (matches[matchIndex]) goToPara(matches[matchIndex].pi);
-  }, [matchIndex, matches, goToPara]);
+  useEffect(() => { if (matches[matchIndex]) goToPara(matches[matchIndex].pi); }, [matchIndex, matches, goToPara]);
 
   const renderText = (text, pi) => {
     if (!searchQuery.trim()) return text;
@@ -176,19 +175,9 @@ function DocxViewer({ mediaId }) {
       if (pos === -1) { parts.push(rem); break; }
       if (pos > 0) parts.push(rem.slice(0, pos));
       const currentOff = off;
-      const gi = matches.findIndex(
-        m => m.pi === pi && m.pos === currentOff + pos
-      );
+      const gi = matches.findIndex(m => m.pi === pi && m.pos === currentOff + pos);
       const focus = gi === matchIndex;
-      parts.push(
-        <mark key={`${pi}-${off+pos}`} style={{
-          background: focus ? "rgba(232,168,56,0.45)" : "rgba(232,168,56,0.18)",
-          color: "var(--text-primary)", borderRadius: 3, padding: "0 2px",
-          boxShadow: focus ? "0 0 0 2px rgba(232,168,56,0.5)" : "none",
-        }}>
-          {rem.slice(pos, pos + q.length)}
-        </mark>
-      );
+      parts.push(<mark key={`${pi}-${off + pos}`} style={{ background: focus ? "rgba(232,168,56,0.45)" : "rgba(232,168,56,0.18)", color: "var(--text-primary)", borderRadius: 3, padding: "0 2px", boxShadow: focus ? "0 0 0 2px rgba(232,168,56,0.5)" : "none" }}>{rem.slice(pos, pos + q.length)}</mark>);
       off += pos + q.length;
       rem = rem.slice(pos + q.length);
     }
@@ -199,28 +188,17 @@ function DocxViewer({ mediaId }) {
 
   return (
     <div style={{ display: "flex", flexDirection: "column", height: "100%" }}>
-      {/* Toolbar */}
-      <div className="flex items-center gap-8" style={{
-        padding: "8px 14px", borderBottom: "1px solid var(--border)",
-        background: "var(--bg-surface)", flexShrink: 0,
-      }}>
+      <div className="flex items-center gap-8" style={{ padding: "8px 14px", borderBottom: "1px solid var(--border)", background: "var(--bg-surface)", flexShrink: 0 }}>
         <div style={{ position: "relative", flex: 1, maxWidth: 260 }}>
           <span style={{ position: "absolute", left: 10, top: "50%", transform: "translateY(-50%)", fontSize: 12, opacity: 0.4 }}>⌕</span>
-          <input
-            value={searchQuery}
-            onChange={e => setSearchQuery(e.target.value)}
-            placeholder="Search in document…"
-            style={{ paddingLeft: 28, height: 32, fontSize: 13 }}
-          />
+          <input value={searchQuery} onChange={e => setSearchQuery(e.target.value)} placeholder="Search in document…" style={{ paddingLeft: 28, height: 32, fontSize: 13 }} />
         </div>
         {searchQuery.trim() && (
           <div className="flex items-center gap-6" style={{ flexShrink: 0 }}>
             <span className="caption">{matches.length ? `${matchIndex + 1}/${matches.length}` : "0 matches"}</span>
             {matches.length > 0 && <>
-              <button onClick={() => setMatchIndex(i => (i - 1 + matches.length) % matches.length)}
-                style={{ background: "var(--bg-elevated)", border: "1px solid var(--border)", color: "var(--text-secondary)", borderRadius: 4, padding: "2px 7px", cursor: "pointer", fontSize: 12 }}>↑</button>
-              <button onClick={() => setMatchIndex(i => (i + 1) % matches.length)}
-                style={{ background: "var(--bg-elevated)", border: "1px solid var(--border)", color: "var(--text-secondary)", borderRadius: 4, padding: "2px 7px", cursor: "pointer", fontSize: 12 }}>↓</button>
+              <button onClick={() => setMatchIndex(i => (i - 1 + matches.length) % matches.length)} style={{ background: "var(--bg-elevated)", border: "1px solid var(--border)", color: "var(--text-secondary)", borderRadius: 4, padding: "2px 7px", cursor: "pointer", fontSize: 12 }}>↑</button>
+              <button onClick={() => setMatchIndex(i => (i + 1) % matches.length)} style={{ background: "var(--bg-elevated)", border: "1px solid var(--border)", color: "var(--text-secondary)", borderRadius: 4, padding: "2px 7px", cursor: "pointer", fontSize: 12 }}>↓</button>
             </>}
           </div>
         )}
@@ -229,44 +207,25 @@ function DocxViewer({ mediaId }) {
           <span className="caption">{scrollPct}%</span>
         </div>
       </div>
-
-      {/* Progress */}
       <div style={{ height: 2, background: "var(--bg-elevated)", flexShrink: 0 }}>
         <div style={{ height: "100%", width: `${scrollPct}%`, background: "linear-gradient(90deg, var(--accent), var(--teal))", transition: "width 0.2s" }} />
       </div>
-
-      {/* Body */}
       <div ref={scrollRef} style={{ flex: 1, overflowY: "auto", padding: "24px 20px 32px" }}>
         {loading ? (
           <div className="empty-state"><div className="spinner" /><span className="body">Loading document…</span></div>
         ) : (
           <div style={{ maxWidth: 700, margin: "0 auto" }}>
             {paragraphs.map((p, i) => {
-              const heading  = isHeading(p);
+              const heading = isHeading(p);
               const isActive = activeParaIdx === i;
               return (
-                <div key={i} ref={el => (paraRefs.current[i] = el)} style={{
-                  display: "flex", gap: 12, marginBottom: heading ? 18 : 10,
-                  padding: "8px 12px", borderRadius: 8,
-                  background: isActive ? "rgba(232,168,56,0.08)" : "transparent",
-                  boxShadow: isActive ? "0 0 0 1px var(--accent-border)" : "none",
-                  transition: "all 0.4s ease",
-                }}>
-                  <span style={{
-                    flexShrink: 0, width: 26, fontSize: 10, fontFamily: "DM Mono, monospace",
-                    color: isActive ? "var(--accent)" : "var(--text-tertiary)",
-                    textAlign: "right", userSelect: "none", paddingTop: heading ? 4 : 2,
-                    transition: "color 0.3s",
-                  }}>{i + 1}</span>
+                <div key={i} ref={el => (paraRefs.current[i] = el)} style={{ display: "flex", gap: 12, marginBottom: heading ? 18 : 10, padding: "8px 12px", borderRadius: 8, background: isActive ? "rgba(232,168,56,0.08)" : "transparent", boxShadow: isActive ? "0 0 0 1px var(--accent-border)" : "none", transition: "all 0.4s ease" }}>
+                  <span style={{ flexShrink: 0, width: 26, fontSize: 10, fontFamily: "DM Mono, monospace", color: isActive ? "var(--accent)" : "var(--text-tertiary)", textAlign: "right", userSelect: "none", paddingTop: heading ? 4 : 2, transition: "color 0.3s" }}>{i + 1}</span>
                   <div style={{ width: 2, flexShrink: 0, borderRadius: 1, background: isActive ? "var(--accent)" : "transparent", transition: "background 0.3s" }} />
                   {heading ? (
-                    <h3 style={{ margin: 0, fontSize: 15, fontWeight: 700, color: isActive ? "var(--accent)" : "var(--text-primary)", lineHeight: 1.5, letterSpacing: "0.01em" }}>
-                      {renderText(p, i)}
-                    </h3>
+                    <h3 style={{ margin: 0, fontSize: 15, fontWeight: 700, color: isActive ? "var(--accent)" : "var(--text-primary)", lineHeight: 1.5, letterSpacing: "0.01em" }}>{renderText(p, i)}</h3>
                   ) : (
-                    <p style={{ margin: 0, fontSize: 13.5, lineHeight: 1.8, color: isActive ? "var(--text-primary)" : "var(--text-secondary)", transition: "color 0.3s" }}>
-                      {renderText(p, i)}
-                    </p>
+                    <p style={{ margin: 0, fontSize: 13.5, lineHeight: 1.8, color: isActive ? "var(--text-primary)" : "var(--text-secondary)", transition: "color 0.3s" }}>{renderText(p, i)}</p>
                   )}
                 </div>
               );
@@ -279,23 +238,24 @@ function DocxViewer({ mediaId }) {
 }
 
 /* ── Main VideoAnalysis ───────────────────────────────────────── */
-export default function VideoAnalysis({ currentVideo, setCurrentVideo, addToHistory, user, onOpenAuth, convId, onConvCreated, onConvUpdated })  {
-  const [activeTab,  setActiveTab]  = useState("ask");
-  const [inputMode,  setInputMode]  = useState("youtube");
-  const [videoUrl,   setVideoUrl]   = useState("");
-  const [videoId,    setVideoId]    = useState("");
-  const [videoTitle, setVideoTitle] = useState("");
-  const [sourceType, setSourceType] = useState("youtube");
-  const [error,      setError]      = useState("");
-  const [warnMsg,    setWarnMsg]    = useState("");
-  const [loading,    setLoading]    = useState(false);
-  const [docxMeta,   setDocxMeta]   = useState(null);
-  const [drag,       setDrag]       = useState(false);
+export default function VideoAnalysis({ currentVideo, setCurrentVideo, addToHistory, user, onOpenAuth, convId, onConvCreated, onConvUpdated }) {
+  const [activeTab,    setActiveTab]    = useState("ask");
+  const [inputMode,    setInputMode]    = useState("youtube");
+  const [videoUrl,     setVideoUrl]     = useState("");
+  const [videoId,      setVideoId]      = useState("");
+  const [videoTitle,   setVideoTitle]   = useState("");
+  const [sourceType,   setSourceType]   = useState("youtube");
+  const [error,        setError]        = useState("");
+  const [warnMsg,      setWarnMsg]      = useState("");
+  const [loading,      setLoading]      = useState(false);
+  const [docxMeta,     setDocxMeta]     = useState(null);
+  const [drag,         setDrag]         = useState(false);
+  const [showKeyModal, setShowKeyModal] = useState(false);
+  const [groqKey,      setGroqKey]      = useState(localStorage.getItem("groq_api_key") || "");
 
   const fileRef = useRef(null);
   const docxRef = useRef(null);
 
-  /* Restore from history nav */
   useEffect(() => {
     if (!currentVideo) return;
     setVideoId(currentVideo.videoId || currentVideo.media_id || "");
@@ -313,7 +273,7 @@ export default function VideoAnalysis({ currentVideo, setCurrentVideo, addToHist
 
   const resetState = () => { setError(""); setWarnMsg(""); setDocxMeta(null); };
 
-  /* YouTube */
+  /* YouTube — fetch transcript in browser, send to backend */
   const handleLoadVideo = async () => {
     resetState();
     const id = extractYouTubeId(videoUrl);
@@ -321,16 +281,41 @@ export default function VideoAnalysis({ currentVideo, setCurrentVideo, addToHist
     setVideoId(id);
     setSourceType("youtube");
     setLoading(true);
+
     try {
-      const res  = await fetch(`https://noembed.com/embed?url=https://www.youtube.com/watch?v=${id}`);
-      const data = await res.json();
+      // Get title
+      const res   = await fetch(`https://noembed.com/embed?url=https://www.youtube.com/watch?v=${id}`);
+      const data  = await res.json();
       const title = data.title || "Untitled Video";
       setVideoTitle(title);
+
+      // Fetch transcript in browser (user's IP — not Azure's)
+      setError("");
+      const transcript = await fetchYouTubeTranscript(id);
+      if (transcript && transcript.length > 0) {
+        // Send transcript text to backend — no YouTube call needed server-side
+        const ingestRes = await fetch(`${API}/ingest_text`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ video_id: id, transcript, title }),
+        });
+        if (!ingestRes.ok) {
+          const errData = await ingestRes.json().catch(() => ({}));
+          console.warn("ingest_text failed:", errData);
+          // Non-fatal: vectorstore might already exist
+        }
+      } else {
+        setWarnMsg("Could not fetch transcript automatically. Answers may be limited.");
+      }
+
       const vid = { videoId: id, title, timestamp: new Date().toISOString(), sourceType: "youtube" };
       setCurrentVideo(vid);
       addToHistory(vid);
-    } catch { setVideoTitle("Untitled Video"); }
-    finally { setLoading(false); }
+    } catch (e) {
+      setError("Failed to load video: " + e.message);
+    } finally {
+      setLoading(false);
+    }
   };
 
   /* Media upload */
@@ -347,13 +332,10 @@ export default function VideoAnalysis({ currentVideo, setCurrentVideo, addToHist
       fd.append("file", file);
       const res  = await fetch(`${API}/ingest`, { method: "POST", body: fd });
       if (!res.ok) throw new Error(await res.text());
-      const data = await res.json();
-      const vid = { videoId: data.media_id, title: data.title || file.name, timestamp: new Date().toISOString(), sourceType: "upload" };
-      setVideoId(data.media_id);
-      setVideoTitle(vid.title);
-      setCurrentVideo(vid);
-      addToHistory(vid);
-      setActiveTab("ask");
+      const d = await res.json();
+      const vid = { videoId: d.media_id, title: d.title || file.name, timestamp: new Date().toISOString(), sourceType: "upload" };
+      setVideoId(d.media_id); setVideoTitle(vid.title);
+      setCurrentVideo(vid); addToHistory(vid); setActiveTab("ask");
     } catch (e) { setError("Upload failed: " + e.message); }
     finally { setLoading(false); }
   };
@@ -372,15 +354,12 @@ export default function VideoAnalysis({ currentVideo, setCurrentVideo, addToHist
       fd.append("file", file);
       const res  = await fetch(`${API}/ingest`, { method: "POST", body: fd });
       if (!res.ok) throw new Error(await res.text());
-      const data = await res.json();
-      setDocxMeta({ word_count: data.word_count, truncated: data.truncated });
-      if (data.truncated) setWarnMsg(`Trimmed to ${MAX_DOCX_WORDS.toLocaleString()} words.`);
-      const vid = { videoId: data.media_id, title: data.title || file.name, timestamp: new Date().toISOString(), sourceType: "docx", wordCount: data.word_count };
-      setVideoId(data.media_id);
-      setVideoTitle(vid.title);
-      setCurrentVideo(vid);
-      addToHistory(vid);
-      setActiveTab("ask");
+      const d = await res.json();
+      setDocxMeta({ word_count: d.word_count, truncated: d.truncated });
+      if (d.truncated) setWarnMsg(`Trimmed to ${MAX_DOCX_WORDS.toLocaleString()} words.`);
+      const vid = { videoId: d.media_id, title: d.title || file.name, timestamp: new Date().toISOString(), sourceType: "docx", wordCount: d.word_count };
+      setVideoId(d.media_id); setVideoTitle(vid.title);
+      setCurrentVideo(vid); addToHistory(vid); setActiveTab("ask");
     } catch (e) { setError("Upload failed: " + e.message); }
     finally { setLoading(false); }
   };
@@ -394,15 +373,25 @@ export default function VideoAnalysis({ currentVideo, setCurrentVideo, addToHist
     else { setInputMode("upload"); handleMediaUpload(file); }
   };
 
-  const videoData = videoId ? { videoId, sourceType, title: videoTitle } : null;
-  const wordPct   = docxMeta ? Math.round((docxMeta.word_count / MAX_DOCX_WORDS) * 100) : 0;
+  const videoData  = videoId ? { videoId, sourceType, title: videoTitle } : null;
+  const wordPct    = docxMeta ? Math.round((docxMeta.word_count / MAX_DOCX_WORDS) * 100) : 0;
   const docxMediaId = sourceType === "docx" && videoId && videoId.length !== 11 ? videoId : null;
 
   return (
     <div className="page-grid">
       {/* Load panel */}
       <div className="card">
-        <div className="subheading mb-12">Load content</div>
+        <div className="flex items-center justify-between mb-12">
+          <div className="subheading">Load content</div>
+          <button
+            className="btn btn-ghost btn-sm"
+            onClick={() => setShowKeyModal(true)}
+            style={{ fontSize: 12, gap: 5, display: "flex", alignItems: "center" }}
+          >
+            {groqKey ? "⚡ AI Ready" : "🔑 Add API Key"}
+          </button>
+        </div>
+
         <div className="mode-selector">
           {[
             { id: "youtube", label: "YouTube" },
@@ -481,7 +470,6 @@ export default function VideoAnalysis({ currentVideo, setCurrentVideo, addToHist
       {/* Analysis section */}
       {videoId && (
         <>
-          {/* Meta header */}
           <div className="card card-sm">
             <div className="flex items-center justify-between flex-wrap gap-8">
               <div>
@@ -497,7 +485,6 @@ export default function VideoAnalysis({ currentVideo, setCurrentVideo, addToHist
             </div>
           </div>
 
-          {/* Player / Viewer */}
           {sourceType === "youtube" && <YouTubePlayer videoId={videoId} />}
           {sourceType === "upload"  && <MediaPlayer videoId={videoId} title={videoTitle} />}
           {sourceType === "docx" && docxMediaId && (
@@ -506,7 +493,6 @@ export default function VideoAnalysis({ currentVideo, setCurrentVideo, addToHist
             </div>
           )}
 
-          {/* Tabs */}
           <div className="card">
             <div className="tab-bar">
               {[
@@ -519,15 +505,19 @@ export default function VideoAnalysis({ currentVideo, setCurrentVideo, addToHist
                 </button>
               ))}
             </div>
-            {activeTab === "ask"      && <AskQuestion
-  videoData={videoData}
-  user={user}             
-  convId={convId}
-  onConvCreated={onConvCreated}
-  onConvUpdated={onConvUpdated}
- />}
-            {activeTab === "chapters" && <Chapters    videoData={videoData} />}
-            {activeTab === "quiz"     && <Quiz        videoData={videoData} />}
+            {activeTab === "ask" && (
+              <AskQuestion
+                videoData={videoData}
+                user={user}
+                groqKey={groqKey}
+                onNeedKey={() => setShowKeyModal(true)}
+                convId={convId}
+                onConvCreated={onConvCreated}
+                onConvUpdated={onConvUpdated}
+              />
+            )}
+            {activeTab === "chapters" && <Chapters videoData={videoData} />}
+            {activeTab === "quiz"     && <Quiz     videoData={videoData} />}
           </div>
         </>
       )}
@@ -540,6 +530,14 @@ export default function VideoAnalysis({ currentVideo, setCurrentVideo, addToHist
             <div className="empty-sub">Paste a YouTube link, upload a file, or drop a document above.</div>
           </div>
         </div>
+      )}
+
+      {/* API Key Modal */}
+      {showKeyModal && (
+        <ApiKeyModal
+          onClose={() => setShowKeyModal(false)}
+          onSaved={(k) => setGroqKey(k)}
+        />
       )}
     </div>
   );

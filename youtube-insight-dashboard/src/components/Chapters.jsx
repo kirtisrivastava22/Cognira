@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-const API = process.env.REACT_APP_API_URL || "/api";
+const API = process.env.REACT_APP_API_URL;
 
 export default function Chapters({ videoData }) {
   const videoId    = videoData?.videoId    || "";
