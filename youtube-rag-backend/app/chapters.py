@@ -21,17 +21,23 @@ from langchain_core.output_parsers import JsonOutputParser
 from langchain_core.documents import Document
 
 from app.rag import load_youtube_docs
-
+import os
 
 # ─────────────────────────────────────────────────────────────────────────────
 # LLM (fast, cheap — chapter titles don't need 70b)
 # ─────────────────────────────────────────────────────────────────────────────
 
-_llm = ChatGroq(
-    model="llama-3.1-8b-instant",
-    temperature=0,
-    max_tokens=300,
-)
+def _get_llm():
+    """Lazy LLM loader — only called when chapters are actually requested."""
+    api_key = os.getenv("GROQ_API_KEY", "")
+    if not api_key:
+        return None
+    return ChatGroq(
+        model="llama-3.1-8b-instant",
+        temperature=0,
+        max_tokens=300,
+    )
+
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -196,7 +202,11 @@ def _llm_title_for_bucket(bucket: dict, idx: int) -> Chapter:
     Falls back to safe defaults if anything fails.
     """
     try:
-        chain  = _CHAPTER_PROMPT | _llm | JsonOutputParser()
+        llm = _get_llm()
+        if llm is None:
+            raise RuntimeError("No LLM configured")
+
+        chain  = _CHAPTER_PROMPT | llm | JsonOutputParser()
         result = chain.invoke({"text": bucket["text"][:1000]})
 
         title      = result.get("title", f"Part {idx + 1}")

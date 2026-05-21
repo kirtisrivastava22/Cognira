@@ -22,21 +22,22 @@ from langchain_core.prompts import PromptTemplate
 from langchain_core.documents import Document
 
 from app.rag import load_youtube_docs
-
+import os
 
 # ─────────────────────────────────────────────────────────────────────────────
 # LLM  (70b for quality; isolated here so it's easy to swap)
 # ─────────────────────────────────────────────────────────────────────────────
-
-def _make_llm(temperature: float = 0.2, max_tokens: int = 1500) -> ChatGroq:
+def _make_llm(temperature: float = 0.2, max_tokens: int = 1500):
+    api_key = os.getenv("GROQ_API_KEY", "")
+    if not api_key:
+        return None
+    from langchain_groq import ChatGroq
     return ChatGroq(
         model="llama-3.3-70b-versatile",
         temperature=temperature,
         max_tokens=max_tokens,
     )
 
-
-_llm = _make_llm()
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -158,6 +159,9 @@ def _extract_facts(windows: list[dict]) -> list[dict]:
 
     for window in windows:
         try:
+            _llm = _make_llm()
+            if _llm is None:
+                raise RuntimeError("No LLM configured")
             chain  = _FACT_PROMPT | _llm
             response = chain.invoke({"text": window["text"]})
             content = response.content
@@ -221,6 +225,9 @@ def _generate_question(
 ) -> QuizQuestion | None:
 
     try:
+        _llm = _make_llm()
+        if _llm is None:
+            raise RuntimeError("No LLM configured")
         chain = _QUESTION_PROMPT | _llm
         response = chain.invoke({
             "fact":                fact,

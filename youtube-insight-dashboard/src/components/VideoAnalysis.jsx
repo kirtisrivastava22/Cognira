@@ -3,7 +3,8 @@ import AskQuestion from "./AskQuestion";
 import ApiKeyModal from "./ApiKeyModal";
 import Chapters from "./Chapters";
 import Quiz from "./Quiz";
-const API = process.env.REACT_APP_API_URL;
+
+const API = process.env.REACT_APP_API_URL || "/api";
 
 const ALLOWED_MEDIA = [".mp4", ".mp3", ".wav", ".mkv", ".m4a", ".webm"];
 const ALLOWED_DOC   = [".docx", ".doc"];
@@ -516,8 +517,8 @@ export default function VideoAnalysis({ currentVideo, setCurrentVideo, addToHist
                 onConvUpdated={onConvUpdated}
               />
             )}
-            {activeTab === "chapters" && <Chapters videoData={videoData} />}
-            {activeTab === "quiz"     && <Quiz     videoData={videoData} />}
+            {activeTab === "chapters" && <Chapters videoData={videoData} groqKey={groqKey} onNeedKey={() => setShowKeyModal(true)} />}
+            {activeTab === "quiz"     && <Quiz     videoData={videoData} groqKey={groqKey} onNeedKey={() => setShowKeyModal(true)} />}
           </div>
         </>
       )}
