@@ -314,7 +314,7 @@ function parseBullets(text) {
   if (!text) return [];
   return text
     .split("\n")
-    .map(line => line.replace(/^[\s\-\*•\d\.]+/, "").trim())
+    .map(line => line.replace(/^[\s\-*•\d.]+/, "").trim())
     .filter(line => line.length > 8)
     .slice(0, 8);
 }
