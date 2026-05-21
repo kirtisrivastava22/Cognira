@@ -11,7 +11,7 @@ const API = process.env.REACT_APP_API_URL;
 // ─── tiny fetch wrapper that always sends cookies ──────────────────────────
 const apiFetch = (path, opts = {}) =>
   fetch(`${API}${path}`, {
-    credentials: "include",            // send httpOnly cookie on every request
+    // credentials: "include",            // send httpOnly cookie on every request
     headers: { "Content-Type": "application/json", ...(opts.headers || {}) },
     ...opts,
   });
