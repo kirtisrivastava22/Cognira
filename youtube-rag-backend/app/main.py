@@ -146,11 +146,11 @@ async def log_requests(request: Request, call_next):
 # CORSMiddleware added LAST so it wraps everything and handles OPTIONS first:
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=False,   # required for cookies
+    allow_origins=ALLOWED_ORIGINS,
+    allow_credentials=True,   # required for cookies
     allow_methods=["*"],
     allow_headers=["*"],
-    # expose_headers=["Set-Cookie"],
+    expose_headers=["Set-Cookie"],
 )
 
 app.include_router(export_router)
@@ -175,7 +175,7 @@ def _set_session_cookie(response: JSONResponse, token: str):
         value=token,
         max_age=COOKIE_MAX_AGE,
         httponly=True,               # JS cannot read this cookie
-        samesite="none",              # CSRF protection
+        samesite="lax",              # CSRF protection
         secure=HTTPS_ONLY,           # True in prod (HTTPS only)
         path="/",
     )

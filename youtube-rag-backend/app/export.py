@@ -1,19 +1,12 @@
 """
 Generates a professionally designed DOCX study-notes document.
-
-Supports:
-  • YouTube videos  — RAG over YouTube transcript
-  • Uploaded DOCX   — RAG over parsed document text (no transcript needed)
-  • Audio / video   — RAG over Whisper transcript
-
-Rate-limited via Depends(rate_limit("export")).
+LLM content is generated on the frontend (browser → Groq directly).
+This endpoint only receives the finished payload and produces the .docx file.
 """
 
 from __future__ import annotations
 
-import json
 import logging
-import os
 import re
 from datetime import datetime
 from pathlib import Path
@@ -21,78 +14,91 @@ from pathlib import Path
 import requests
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import FileResponse
+from pydantic import BaseModel
 
 from app.rate_limiter import rate_limit
-from app.rag import (
-    ask_youtube_video,
-    load_youtube_docs,
-    split_documents,
-    hybrid_retrieve,
-    rerank_docs_by_timestamp_density,
-    get_or_create_vectorstore,
-    format_docs_with_references,
-)
 from app.media_manager import get_media_meta
-from app.docx_reader import load_docx_docs
 
 log = logging.getLogger("export")
-
 router = APIRouter()
 
-
-# ──────────────────────────────────────────────────────────────────────────
-# Metadata helpers
-# ──────────────────────────────────────────────────────────────────────────
 from docx import Document
 from docx.shared import Pt
 from docx.enum.text import WD_ALIGN_PARAGRAPH
 
+
+# ──────────────────────────────────────────────────────────────────────────
+# Request model — payload sent from browser after LLM generation
+# ──────────────────────────────────────────────────────────────────────────
+
+class ExportSection(BaseModel):
+    heading: str
+    bullets: list[str]
+
+class ExportPayload(BaseModel):
+    video_id:      str
+    video_title:   str
+    channel_name:  str = ""
+    video_url:     str = ""
+    summary:       str = ""
+    sections:      list[ExportSection] = []
+    key_takeaways: list[str] = []
+    timestamps:    list[dict] = []
+
+
+# ──────────────────────────────────────────────────────────────────────────
+# DOCX builder
+# ──────────────────────────────────────────────────────────────────────────
+
 def generate_docx_from_payload(payload: dict, output_path: str):
     doc = Document()
 
-    # ── Title ─────────────────────────────
-    title = doc.add_heading(payload["video_title"], 0)
-    title.alignment = WD_ALIGN_PARAGRAPH.CENTER
+    title_para = doc.add_heading(payload["video_title"], 0)
+    title_para.alignment = WD_ALIGN_PARAGRAPH.CENTER
 
     meta = doc.add_paragraph()
-    meta.add_run(f'{payload["channel_name"]}\n').bold = True
-    meta.add_run(f'{payload["video_url"]}\n')
-    meta.add_run(f'Generated at: {payload["generated_at"]}')
+    if payload.get("channel_name"):
+        meta.add_run(f'{payload["channel_name"]}\n').bold = True
+    if payload.get("video_url"):
+        meta.add_run(f'{payload["video_url"]}\n')
+    meta.add_run(f'Generated at: {payload.get("generated_at", datetime.now().strftime("%Y-%m-%d %H:%M"))}')
     meta.alignment = WD_ALIGN_PARAGRAPH.CENTER
+    doc.add_paragraph("")
 
-    doc.add_paragraph("")  # spacing
+    if payload.get("summary"):
+        doc.add_heading("Executive Summary", level=1)
+        p = doc.add_paragraph(payload["summary"])
+        p.paragraph_format.space_after = Pt(10)
 
-    # ── Summary ───────────────────────────
-    doc.add_heading("Executive Summary", level=1)
-    p = doc.add_paragraph(payload["summary"])
-    p.paragraph_format.space_after = Pt(10)
-
-    # ── Sections ──────────────────────────
-    for section in payload["sections"]:
+    for section in payload.get("sections", []):
         doc.add_heading(section["heading"], level=1)
         for bullet in section["bullets"]:
-            p = doc.add_paragraph(style='List Bullet')
+            p   = doc.add_paragraph(style="List Bullet")
             run = p.add_run(bullet)
             run.font.size = Pt(11)
 
-    # ── Takeaways ─────────────────────────
-    doc.add_heading("Key Takeaways", level=1)
-    for t in payload["key_takeaways"]:
-        p = doc.add_paragraph(style='List Bullet')
-        run = p.add_run(t)
-        run.bold = True  # highlight
+    if payload.get("key_takeaways"):
+        doc.add_heading("Key Takeaways", level=1)
+        for t in payload["key_takeaways"]:
+            p      = doc.add_paragraph(style="List Bullet")
+            run    = p.add_run(t)
+            run.bold = True
 
-    # ── Timestamps ────────────────────────
     if payload.get("timestamps"):
         doc.add_heading("Important Moments", level=1)
         for ts in payload["timestamps"]:
-            p = doc.add_paragraph(style='List Bullet')
+            p = doc.add_paragraph(style="List Bullet")
             p.add_run(f'{ts["display"]} ').bold = True
-            p.add_run(f'— {ts["label"]}')
+            p.add_run(f'— {ts.get("label", "")}')
 
     doc.save(output_path)
-    
-def get_video_metadata(video_id: str) -> dict:
+
+
+# ──────────────────────────────────────────────────────────────────────────
+# Metadata helper (for title fallback when browser doesn't send it)
+# ──────────────────────────────────────────────────────────────────────────
+
+def _get_video_title(video_id: str) -> dict:
     try:
         res = requests.get(
             "https://www.youtube.com/oembed",
@@ -101,197 +107,50 @@ def get_video_metadata(video_id: str) -> dict:
         )
         res.raise_for_status()
         data = res.json()
-        return {
-            "title":   data.get("title", f"YouTube Video ({video_id})"),
-            "channel": data.get("author_name", "Unknown Channel"),
-        }
+        return {"title": data.get("title", video_id), "channel": data.get("author_name", "")}
     except Exception:
-        return {"title": f"YouTube Video ({video_id})", "channel": "Unknown Channel"}
-
-
-def _media_metadata(media_id: str) -> dict:
-    """Return title / channel for any media type."""
-    meta = get_media_meta(media_id)
-    if meta:
-        title = meta.get("title") or media_id
-        source_type = meta.get("source_type", "")
-        if source_type == "youtube":
-            return get_video_metadata(media_id)
-        return {"title": title, "channel": source_type.capitalize() + " upload"}
-    # Fallback — try YouTube
-    return get_video_metadata(media_id)
+        meta = get_media_meta(video_id)
+        if meta:
+            return {"title": meta.get("title", video_id), "channel": ""}
+        return {"title": video_id, "channel": ""}
 
 
 # ──────────────────────────────────────────────────────────────────────────
-# Content generation
-# ──────────────────────────────────────────────────────────────────────────
-
-_NOTE_QUESTIONS = [
-    ("Key Concepts",
-     "List the 3-5 most important concepts or definitions introduced in this content. "
-     "Use bullet points. Each bullet: one clear sentence. No timestamps."),
-    ("Main Points & Explanations",
-     "What are the main points or arguments made in this content? "
-     "List them as concise bullet points (one idea per bullet)."),
-    ("Examples & Case Studies",
-     "What specific examples, analogies, or case studies does the author use? "
-     "List each as a short bullet. If none, reply: None mentioned."),
-    ("Comparisons & Trade-offs",
-     "Does the content compare two or more approaches, tools, or ideas? "
-     "List the key differences as bullet points. If none, reply: None mentioned."),
-    ("Conclusions & Recommendations",
-     "What conclusions or recommendations are given? List as bullet points."),
-]
-
-_SUMMARY_Q  = (
-    "Write a 2-3 sentence executive summary. "
-    "What is it about, and what is the main insight a reader should take away?"
-)
-_TAKEAWAY_Q = (
-    "List exactly 3 key takeaways — the 3 things a student must remember. "
-    "Each: one sentence, no timestamps."
-)
-
-
-def _ask(media_id: str, question: str) -> str:
-    result = ask_youtube_video(media_id, question)
-    answer = result.get("answer", "")
-    answer = re.sub(r'\[\d{2}:\d{2}\]', '', answer).strip()
-    return answer if answer and "i don't know" not in answer.lower() else ""
-
-
-def _parse_bullets(text: str) -> list[str]:
-    if not text:
-        return []
-    bullets = []
-    for line in text.splitlines():
-        line = re.sub(r'^[\s\-\*•\d\.]+', '', line).strip()
-        if len(line) > 8:
-            bullets.append(line)
-    return bullets[:8]
-
-
-def _get_top_timestamps(media_id: str, n: int = 6) -> list[dict]:
-    """Pull top timestamps — returns empty list for DOCX (no time axis)."""
-    meta = get_media_meta(media_id)
-    if meta and meta.get("source_type") == "docx":
-        return []
-
-    from app.rag import get_or_create_vectorstore, hybrid_retrieve, rerank_docs_by_timestamp_density
-    db = get_or_create_vectorstore(
-        media_id,
-        docs_builder=lambda vid: split_documents(load_youtube_docs(vid))
-    )
-    if db is None:
-        return []
-
-    docs = hybrid_retrieve(db, "key concepts main points", k=20)
-    docs = rerank_docs_by_timestamp_density(docs)
-
-    timestamps = []
-    seen = set()
-    for doc in docs:
-        ts = int(doc.metadata.get("start", 0))
-        if any(abs(ts - s) < 45 for s in seen):
-            continue
-        seen.add(ts)
-        mm, ss = divmod(ts, 60)
-        label = doc.page_content[:60].strip().rstrip(",.")
-        timestamps.append({"seconds": ts, "display": f"{mm:02d}:{ss:02d}", "label": label})
-        if len(timestamps) >= n:
-            break
-
-    return timestamps
-
-
-# ──────────────────────────────────────────────────────────────────────────
-# DOCX export endpoint
+# Export endpoint — accepts full payload from browser
 # ──────────────────────────────────────────────────────────────────────────
 
 @router.post("/export/docx", dependencies=[Depends(rate_limit("export"))])
-def export_docx(video_id: str):
+def export_docx(payload: ExportPayload):
     """
-    Generate a study-notes DOCX for any ingested media (YouTube, upload, DOCX).
+    Receive a finished notes payload from the browser and generate a DOCX.
+    No LLM calls happen here — the browser already ran those via Groq.
     """
-    # ── Metadata ──────────────────────────────────────────────────────────────
-    meta_info = _media_metadata(video_id)
-    source_url = f"https://www.youtube.com/watch?v={video_id}"
-    media_meta = get_media_meta(video_id)
-    if media_meta and media_meta.get("source_type") != "youtube":
-        source_url = media_meta.get("source_url") or media_meta.get("title") or video_id
-
-    # ── Content ───────────────────────────────────────────────────────────────
-    summary  = _ask(video_id, _SUMMARY_Q) or "Summary not available."
-
-    sections = []
-    for heading, question in _NOTE_QUESTIONS:
-        raw     = _ask(video_id, question)
-        bullets = _parse_bullets(raw)
-        if bullets and bullets != ["None mentioned"]:
-            sections.append({"heading": heading, "bullets": bullets})
-
-    takeaways = _parse_bullets(_ask(video_id, _TAKEAWAY_Q)) or ["See the content for key insights."]
-    timestamps = _get_top_timestamps(video_id, n=6)
-
-    # ── Payload ───────────────────────────────────────────────────────────────
-    payload = {
-        "video_title":  meta_info["title"],
-        "channel_name": meta_info["channel"],
-        "video_url":    source_url,
-        "generated_at": datetime.now().strftime("%Y-%m-%d %H:%M"),
-        "summary":      summary,
-        "sections":     sections,
-        "key_takeaways": takeaways[:4],
-        "timestamps":   timestamps,
-    }
-
-    # # ── Node.js generator ─────────────────────────────────────────────────────
-    # export_dir = Path("exports")
-    # export_dir.mkdir(exist_ok=True)
-    # out_path = export_dir / f"{video_id}_notes.docx"
-
-    # with tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False, encoding="utf-8") as tmp:
-    #     json.dump(payload, tmp, ensure_ascii=False)
-    #     tmp_path = tmp.name
-
-    # try:
-    #     result = subprocess.run(
-    #         ["node", str(_GENERATOR_SCRIPT), tmp_path, str(out_path)],
-    #         capture_output=True, text=True, timeout=30,
-    #     )
-    #     if result.returncode != 0:
-    #         raise RuntimeError(result.stderr or result.stdout)
-    # except subprocess.TimeoutExpired:
-    #     raise HTTPException(status_code=504, detail="Document generation timed out.")
-    # except Exception as exc:
-    #     log.exception("DOCX generation failed")
-    #     raise HTTPException(status_code=500, detail=f"DOCX generation failed: {exc}")
-    # finally:
-    #     os.unlink(tmp_path)
-
-    # if not out_path.exists():
-    #     raise HTTPException(status_code=500, detail="DOCX file was not created.")
-
-    # safe_title = re.sub(r'[^\w\s-]', '', meta_info["title"])[:60].strip()
-    # filename   = f"{safe_title} — Study Notes.docx" if safe_title else "Study Notes.docx"
-
-    # return FileResponse(
-    #     str(out_path),
-    #     media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-    #     filename=filename,
-    # )
-    # ── Python DOCX generator ───────────────
     export_dir = Path("exports")
     export_dir.mkdir(exist_ok=True)
+    out_path = export_dir / f"{payload.video_id}_notes.docx"
 
-    out_path = export_dir / f"{video_id}_notes.docx"
+    # Fill in title/channel if browser didn't provide them
+    title   = payload.video_title or _get_video_title(payload.video_id)["title"]
+    channel = payload.channel_name or _get_video_title(payload.video_id).get("channel", "")
+
+    docx_payload = {
+        "video_title":   title,
+        "channel_name":  channel,
+        "video_url":     payload.video_url,
+        "generated_at":  datetime.now().strftime("%Y-%m-%d %H:%M"),
+        "summary":       payload.summary,
+        "sections":      [{"heading": s.heading, "bullets": s.bullets} for s in payload.sections],
+        "key_takeaways": payload.key_takeaways[:4] or ["See the content for key insights."],
+        "timestamps":    payload.timestamps,
+    }
 
     try:
-        generate_docx_from_payload(payload, str(out_path))
+        generate_docx_from_payload(docx_payload, str(out_path))
     except Exception as exc:
         log.exception("DOCX generation failed")
         raise HTTPException(status_code=500, detail=f"DOCX generation failed: {exc}")
-    safe_title = re.sub(r'[^\w\s-]', '', meta_info["title"])[:60].strip()
+
+    safe_title = re.sub(r"[^\w\s-]", "", title)[:60].strip()
     filename   = f"{safe_title} — Study Notes.docx" if safe_title else "Study Notes.docx"
 
     return FileResponse(

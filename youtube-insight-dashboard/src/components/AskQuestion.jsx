@@ -256,25 +256,166 @@ export default function AskQuestion({
   };
 
   // ── Export ────────────────────────────────────────────────────────────────
-  const handleExport = async () => {
-    setStatus("Generating notes…");
-    try {
-      const res = await fetch(`${API}/export/docx?video_id=${videoId}`, { method: "POST" });
-      if (!res.ok) throw new Error("Export failed");
-      const blob = new Blob([await res.arrayBuffer()], {
-        type: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-      });
-      const url = URL.createObjectURL(blob);
-      const a   = document.createElement("a");
-      a.href = url;
-      const disp = res.headers.get("Content-Disposition") || "";
-      a.download = disp.includes("filename=") ? disp.split("filename=")[1].replace(/"/g, "") : `${videoId}_notes.docx`;
-      document.body.appendChild(a); a.click();
-      URL.revokeObjectURL(url); document.body.removeChild(a);
-    } catch { setError("Export failed."); }
-    finally  { setStatus(""); }
-  };
+  // ─────────────────────────────────────────────────────────────────────────────
+// Replace the handleExport function in AskQuestion.jsx with this
+// ─────────────────────────────────────────────────────────────────────────────
 
+const NOTE_QUESTIONS = [
+  {
+    heading: "Key Concepts",
+    question: "List the 3-5 most important concepts or definitions introduced. One clear sentence per bullet. No timestamps.",
+  },
+  {
+    heading: "Main Points & Explanations",
+    question: "What are the main points or arguments made? List as concise bullet points.",
+  },
+  {
+    heading: "Examples & Case Studies",
+    question: "What specific examples or analogies are used? List each as a short bullet. If none, reply: None mentioned.",
+  },
+  {
+    heading: "Conclusions & Recommendations",
+    question: "What conclusions or recommendations are given? List as bullet points.",
+  },
+];
+
+const SUMMARY_Q  = "Write a 2-3 sentence executive summary. What is this about and what is the main insight?";
+const TAKEAWAY_Q = "List exactly 3 key takeaways — the 3 things a student must remember. Each: one sentence, no timestamps.";
+
+async function askGroqWithContext(context, question, groqKey) {
+  const res = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+    method: "POST",
+    headers: {
+      "Authorization": `Bearer ${groqKey}`,
+      "Content-Type":  "application/json",
+    },
+    body: JSON.stringify({
+      model:       "llama-3.1-8b-instant",
+      temperature: 0,
+      max_tokens:  400,
+      messages: [
+        {
+          role: "system",
+          content: "You are a strict transcript analyst. Answer ONLY using the provided transcript excerpts. No outside knowledge.",
+        },
+        {
+          role: "user",
+          content: `Transcript excerpts:\n${context}\n\nQuestion: ${question}\n\nAnswer:`,
+        },
+      ],
+    }),
+  });
+  if (!res.ok) return "";
+  const data = await res.json();
+  return data.choices?.[0]?.message?.content || "";
+}
+
+function parseBullets(text) {
+  if (!text) return [];
+  return text
+    .split("\n")
+    .map(line => line.replace(/^[\s\-\*•\d\.]+/, "").trim())
+    .filter(line => line.length > 8)
+    .slice(0, 8);
+}
+
+const handleExport = async () => {
+  const key = groqKey || localStorage.getItem("groq_api_key") || "";
+  if (!key) { onNeedKey?.(); setError("Add your Groq API key to export notes."); return; }
+
+  setStatus("Loading transcript…");
+  try {
+    // Step 1: Get docs from backend vectorstore
+    const retrieveRes = await fetch(`${API}/retrieve`, {
+      method:  "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ video_id: videoId, question: "key concepts main points summary", k: 30 }),
+    });
+    if (!retrieveRes.ok) throw new Error("Could not load transcript.");
+    const { docs } = await retrieveRes.json();
+    if (!docs?.length) throw new Error("No transcript available for this video.");
+
+    // Build context string from docs
+    const context = docs
+      .map(doc => {
+        const ts  = doc.metadata?.start || 0;
+        const mm  = String(Math.floor(ts / 60)).padStart(2, "0");
+        const ss  = String(ts % 60).padStart(2, "0");
+        return `[${mm}:${ss}] ${doc.page_content}`;
+      })
+      .join("\n\n");
+
+    // Step 2: Generate all content in browser via Groq
+    setStatus("Generating summary…");
+    const summary = await askGroqWithContext(context, SUMMARY_Q, key);
+
+    setStatus("Generating sections…");
+    const sections = [];
+    for (const { heading, question } of NOTE_QUESTIONS) {
+      const raw     = await askGroqWithContext(context, question, key);
+      const bullets = parseBullets(raw);
+      if (bullets.length && !bullets.includes("None mentioned")) {
+        sections.push({ heading, bullets });
+      }
+    }
+
+    setStatus("Generating takeaways…");
+    const takeawaysRaw = await askGroqWithContext(context, TAKEAWAY_Q, key);
+    const key_takeaways = parseBullets(takeawaysRaw);
+
+    // Step 3: Get top timestamps from docs
+    const seen = new Set();
+    const timestamps = [];
+    for (const doc of docs) {
+      const ts = doc.metadata?.start || 0;
+      if ([...seen].some(s => Math.abs(s - ts) < 45)) continue;
+      seen.add(ts);
+      const mm = String(Math.floor(ts / 60)).padStart(2, "0");
+      const ss = String(ts % 60).padStart(2, "0");
+      timestamps.push({ seconds: ts, display: `${mm}:${ss}`, label: doc.page_content.slice(0, 60).trim() });
+      if (timestamps.length >= 6) break;
+    }
+
+    // Step 4: Send payload to backend — backend only generates the .docx file
+    setStatus("Building document…");
+    const exportRes = await fetch(`${API}/export/docx`, {
+      method:  "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        video_id:      videoId,
+        video_title:   videoData?.title || videoId,
+        video_url:     sourceType === "youtube" ? `https://youtube.com/watch?v=${videoId}` : "",
+        summary:       summary || "Summary not available.",
+        sections,
+        key_takeaways: key_takeaways.length ? key_takeaways : ["See the content for key insights."],
+        timestamps,
+      }),
+    });
+
+    if (!exportRes.ok) throw new Error("Export failed on server.");
+
+    // Step 5: Download the file
+    const blob = new Blob([await exportRes.arrayBuffer()], {
+      type: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    });
+    const url  = URL.createObjectURL(blob);
+    const a    = document.createElement("a");
+    a.href     = url;
+    const disp = exportRes.headers.get("Content-Disposition") || "";
+    a.download = disp.includes("filename=")
+      ? disp.split("filename=")[1].replace(/"/g, "")
+      : `${videoId}_notes.docx`;
+    document.body.appendChild(a);
+    a.click();
+    URL.revokeObjectURL(url);
+    document.body.removeChild(a);
+
+  } catch (e) {
+    setError(e.message || "Export failed.");
+  } finally {
+    setStatus("");
+  }
+};
   // ── Share ─────────────────────────────────────────────────────────────────
   const handleShare = async () => {
     if (!user) { setError("Sign in to share conversations."); return; }
