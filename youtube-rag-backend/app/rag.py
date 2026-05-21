@@ -1,3 +1,5 @@
+import os
+
 import torch
 from transformers import (
     AutoTokenizer,
@@ -35,7 +37,12 @@ import re
 # LLM
 # =========================
 
+# Replace load_llm and the global llm with this:
 def load_llm():
+    api_key = os.getenv("GROQ_API_KEY", "")
+    if not api_key:
+        return None  # ← don't crash, just return None
+    from langchain_groq import ChatGroq
     return ChatGroq(
         model="llama-3.1-8b-instant",
         temperature=0,
@@ -43,8 +50,7 @@ def load_llm():
         streaming=True
     )
 
-llm = load_llm()
-
+llm = load_llm() 
 # =========================
 # TRANSCRIPT LOADER
 # =========================
@@ -315,6 +321,12 @@ def ask_youtube_video(video_id, question):
         search_type="mmr",
         search_kwargs={"k": 14, "fetch_k": 60, "lambda_mult": 0.45}
     )
+    if llm is None:
+        return {
+            "answer": "LLM not configured on server — answers run in browser.",
+            "timestamps": [],
+            "video_id": video_id
+        }
     chain = build_rag_chain(llm, retriever)
     answer = chain.invoke(question).strip()
 
