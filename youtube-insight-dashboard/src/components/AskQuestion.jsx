@@ -1,6 +1,5 @@
 import React, { useState, useRef, useEffect } from "react";
-
-const API = process.env.REACT_APP_API_URL;
+const API = process.env.REACT_APP_API_URL || "";
 
 // Single-pass ref rendering: [para N] → teal button, [MM:SS] → amber button
 const COMBINED_RE = /\[para(?:graph)?\s*(\d+)\]|\[(\d{1,2}):(\d{2})\]/gi;

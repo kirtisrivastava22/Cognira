@@ -2,22 +2,19 @@ import React from "react";
 import { useNavigate } from "react-router-dom";
 
 const FEATURES = [
-  { icon: "◈", title: "Ask anything",    body: "Timestamped answers from any video, audio, or document." },
-  { icon: "⬡", title: "Smart chapters",  body: "AI detects natural topic shifts and names each section." },
-  { icon: "⊞", title: "Instant quiz",    body: "Multiple-choice questions generated from the actual content." },
-  { icon: "↓", title: "Export notes",    body: "Download polished DOCX study notes in one click." },
-  { icon: "⌕", title: "Doc search",      body: "Full-text search with paragraph-level navigation." },
-  { icon: "◷", title: "Seek & jump",     body: "Click any reference to jump to that exact moment or passage." },
+  { icon: "◈", title: "Ask anything",   body: "Timestamped answers from any video, audio, or document." },
+  { icon: "⬡", title: "Smart chapters", body: "AI detects natural topic shifts and names each section." },
+  { icon: "⊞", title: "Instant quiz",   body: "Multiple-choice questions generated from the actual content." },
+  { icon: "↓", title: "Export notes",   body: "Download polished DOCX study notes in one click." },
+  { icon: "⌕", title: "Doc search",     body: "Full-text search with paragraph-level navigation." },
+  { icon: "◷", title: "Seek & jump",    body: "Click any reference to jump to that exact moment or passage." },
 ];
 
 export default function Dashboard({ videoHistory, setCurrentVideo, user, onOpenAuth }) {
-  const navigate   = useNavigate();
-  const recent     = videoHistory.slice(0, 6);
+  const navigate = useNavigate();
+  const recent   = videoHistory.slice(0, 6);
 
-  const open = (video) => {
-    setCurrentVideo(video);
-    navigate("/analyze");
-  };
+  const open = video => { setCurrentVideo(video); navigate("/analyze"); };
 
   return (
     <div className="page-grid">
@@ -25,7 +22,7 @@ export default function Dashboard({ videoHistory, setCurrentVideo, user, onOpenA
       <div className="card card-accent">
         <div style={{ marginBottom: 20 }}>
           <span className="tag tag-accent" style={{ marginBottom: 14, display: "inline-flex" }}>
-            {user ? `Synced · ${user.name}` : "Guest mode"}
+            {user ? `✓ Synced · ${user.name}` : "Guest mode"}
           </span>
           <h1 className="display" style={{ marginBottom: 12 }}>
             Turn any content<br />
@@ -37,9 +34,9 @@ export default function Dashboard({ videoHistory, setCurrentVideo, user, onOpenA
           </p>
         </div>
 
-        <div className="flex gap-10 flex-wrap">
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
           <button className="btn btn-primary btn-lg" onClick={() => navigate("/analyze")}>
-            Start analyzing
+            Start analyzing →
           </button>
           {!user && (
             <button className="btn btn-secondary" onClick={onOpenAuth}>
@@ -50,15 +47,15 @@ export default function Dashboard({ videoHistory, setCurrentVideo, user, onOpenA
       </div>
 
       {/* Stats */}
-      <div className="flex gap-12" style={{ flexWrap: "wrap" }}>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(130px, 1fr))", gap: 10 }}>
         {[
-          { value: videoHistory.length, label: user ? "Sessions synced" : "Sessions (local)" },
-          { value: "Streaming", label: "Real-time answers" },
-          { value: "3-in-1",    label: "Ask · Chapters · Quiz" },
+          { value: videoHistory.length || "0", label: user ? "Sessions synced" : "Sessions (local)" },
+          { value: "Streaming",   label: "Real-time answers" },
+          { value: "3-in-1",     label: "Ask · Chapters · Quiz" },
         ].map((s, i) => (
-          <div key={i} className="card card-sm" style={{ flex: "1 1 130px" }}>
-            <div className="display-sm" style={{ fontSize: 22, color: "var(--accent)" }}>{s.value}</div>
-            <div className="caption mt-4">{s.label}</div>
+          <div key={i} className="card card-sm" style={{ textAlign: "center" }}>
+            <div style={{ fontFamily: "'Fraunces', serif", fontSize: 22, color: "var(--accent)", fontWeight: 700, marginBottom: 4 }}>{s.value}</div>
+            <div className="caption">{s.label}</div>
           </div>
         ))}
       </div>
@@ -71,9 +68,7 @@ export default function Dashboard({ videoHistory, setCurrentVideo, user, onOpenA
             <button className="btn btn-ghost btn-sm" onClick={() => navigate("/history")}>View all →</button>
           </div>
           <div className="history-grid">
-            {recent.map((v, i) => (
-              <HistoryCard key={i} video={v} onClick={() => open(v)} />
-            ))}
+            {recent.map((v, i) => <HistoryCard key={i} video={v} onClick={() => open(v)} />)}
           </div>
         </div>
       )}
@@ -81,13 +76,10 @@ export default function Dashboard({ videoHistory, setCurrentVideo, user, onOpenA
       {/* Features grid */}
       <div className="card">
         <div className="subheading mb-16">What you can do</div>
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(200px, 1fr))", gap: 12 }}>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(185px, 1fr))", gap: 10 }}>
           {FEATURES.map((f, i) => (
-            <div key={i} style={{
-              padding: "16px 18px", borderRadius: "var(--radius)", border: "1px solid var(--border)",
-              background: "var(--bg-elevated)",
-            }}>
-              <div style={{ fontSize: 20, marginBottom: 8, color: "var(--accent)" }}>{f.icon}</div>
+            <div key={i} style={{ padding: "15px 16px", borderRadius: "var(--radius)", border: "1px solid var(--border)", background: "var(--bg-elevated)" }}>
+              <div style={{ fontSize: 18, marginBottom: 7, color: "var(--accent)" }}>{f.icon}</div>
               <div style={{ fontSize: 13.5, fontWeight: 700, color: "var(--text-primary)", marginBottom: 5 }}>{f.title}</div>
               <div className="caption" style={{ lineHeight: 1.6 }}>{f.body}</div>
             </div>
@@ -99,16 +91,16 @@ export default function Dashboard({ videoHistory, setCurrentVideo, user, onOpenA
 }
 
 function HistoryCard({ video, onClick }) {
-  const isYoutube  = (video.sourceType || video.source_type) === "youtube" || (!video.sourceType && !video.source_type);
-  const mediaId    = video.videoId || video.media_id;
-  const srcType    = video.sourceType || video.source_type;
-  const date       = video.viewed_at || video.timestamp;
+  const isYoutube = (video.sourceType || video.source_type) === "youtube" || (!video.sourceType && !video.source_type);
+  const mediaId   = video.videoId || video.media_id;
+  const srcType   = video.sourceType || video.source_type;
+  const date      = video.viewed_at || video.timestamp;
 
   return (
     <div className="history-card" onClick={onClick}>
       <div className="history-thumb">
         {isYoutube ? (
-          <img src={`https://img.youtube.com/vi/${mediaId}/mqdefault.jpg`} alt={video.title} />
+          <img src={`https://img.youtube.com/vi/${mediaId}/mqdefault.jpg`} alt={video.title} loading="lazy" />
         ) : (
           srcType === "docx" ? "📄" : "🎬"
         )}

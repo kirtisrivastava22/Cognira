@@ -37,7 +37,7 @@ export default function ApiKeyModal({ onClose, onSaved }) {
       <div className="modal" onClick={e => e.stopPropagation()} style={{ maxWidth: 460 }}>
         <button className="modal-close" onClick={onClose}>✕</button>
 
-        <div className="modal-brand" style={{ fontSize: 18 }}>⚡ AI Settings</div>
+        <div className="modal-brand" style={{ fontSize: 18 }}> AI Settings</div>
 
         <div style={{ fontSize: 13.5, color: "var(--text-secondary)", marginBottom: 20, lineHeight: 1.6 }}>
           Answers run <strong style={{ color: "var(--text-primary)" }}>directly in your browser</strong> using
