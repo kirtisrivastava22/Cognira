@@ -294,7 +294,7 @@ export default function VideoAnalysis({ currentVideo, setCurrentVideo, addToHist
       .catch(() => {});
   }, [convId]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  useEffect(() => {
+  useEffect(() => { // eslint-disable-line react-hooks/exhaustive-deps
     if (!currentVideo) return;
     // Only reset conv state when the media actually changes
     const incomingId = currentVideo.videoId || currentVideo.media_id;
@@ -313,7 +313,7 @@ export default function VideoAnalysis({ currentVideo, setCurrentVideo, addToHist
     if ((currentVideo.sourceType || "youtube") === "youtube") {
       setVideoUrl(`https://www.youtube.com/watch?v=${currentVideo.videoId || currentVideo.media_id}`);
     }
-  }, [currentVideo]);
+  }, [currentVideo,videoId]);
 
   const resetState = () => { setError(""); setWarnMsg(""); setDocxMeta(null); };
 

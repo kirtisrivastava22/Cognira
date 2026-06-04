@@ -494,8 +494,6 @@ export default function History({ videoHistory, setCurrentVideo, user }) {
     return () => style.remove();
   }, []);
 
-  const totalGroups = Object.values(grouped).filter(g => g.length > 0).length;
-
   return (
     <div className="page-grid">
 
