@@ -1,33 +1,39 @@
 import { useState, useEffect, useCallback } from "react";
+import { apiFetch } from "../App";   // re-use the JWT-aware fetch wrapper
 
-const API = process.env.REACT_APP_API_URL;
-
-export function useConversations(user, mediaId) {
+export function useConversations(user) {
   const [list,         setList]         = useState([]);
   const [activeConvId, setActiveConvId] = useState(null);
 
-  // ── Fetch conversations for this user (+ optional media filter) ──────────
+  const userId = user?.user_id ?? null;
+
+  // ── Fetch all conversations for this user ────────────────────────────────
   const fetchList = useCallback(async () => {
-    if (!user?.user_id) { setList([]); return; }
+    if (!userId) { setList([]); return; }
     try {
-      const url = mediaId
-        ? `${API}/conversations/${user.user_id}?media_id=${mediaId}`
-        : `${API}/conversations/${user.user_id}`;
-      const res = await fetch(url);
+      const res = await apiFetch(`/conversations/${userId}`);
       if (!res.ok) return;
       const data = await res.json();
       setList(data.conversations || []);
     } catch { /* ignore */ }
-  }, [user, mediaId]);
+  }, [userId]);
 
-  useEffect(() => { fetchList(); }, [fetchList]);
+  useEffect(() => {
+    fetchList();
+  }, [fetchList]);
 
-  // ── Select a conversation from the sidebar ───────────────────────────────
+  // ── Reset when user signs out ────────────────────────────────────────────
+  useEffect(() => {
+    if (!userId) {
+      setList([]);
+      setActiveConvId(null);
+    }
+  }, [userId]);
+
   const select = useCallback((conv) => {
-    setActiveConvId(conv.conv_id);
+    setActiveConvId(conv?.conv_id ?? null);
   }, []);
 
-  // ── Add a newly-created conversation ────────────────────────────────────
   const add = useCallback((conv) => {
     if (!conv) return;
     setActiveConvId(conv.conv_id);
@@ -37,13 +43,13 @@ export function useConversations(user, mediaId) {
     });
   }, []);
 
-  // ── Update an existing conversation (rename / pin / append) ─────────────
   const update = useCallback((conv) => {
     if (!conv) return;
-    setList(prev => prev.map(c => c.conv_id === conv.conv_id ? conv : c));
+    setList(prev =>
+      prev.map(c => c.conv_id === conv.conv_id ? { ...c, ...conv } : c)
+    );
   }, []);
 
-  // ── Remove a deleted conversation ────────────────────────────────────────
   const remove = useCallback((conv_id) => {
     setList(prev => prev.filter(c => c.conv_id !== conv_id));
     setActiveConvId(prev => (prev === conv_id ? null : prev));

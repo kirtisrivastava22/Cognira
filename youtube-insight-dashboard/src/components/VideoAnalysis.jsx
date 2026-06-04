@@ -253,12 +253,55 @@ export default function VideoAnalysis({ currentVideo, setCurrentVideo, addToHist
   const [drag,         setDrag]         = useState(false);
   const [showKeyModal, setShowKeyModal] = useState(false);
   const [groqKey,      setGroqKey]      = useState(localStorage.getItem("groq_api_key") || "");
+  // Conversation state — scoped per media
+  const [activeConvId,  setActiveConvId]  = useState(null);
+  const [convMessages,  setConvMessages]  = useState([]);
 
   const fileRef = useRef(null);
   const docxRef = useRef(null);
 
+  // ── When sidebar selects a conversation, fetch it and restore media + messages ──
+  useEffect(() => {
+    if (!convId) return;
+    fetch(`${API}/conversation/${convId}`)
+      .then(r => r.ok ? r.json() : null)
+      .then(data => {
+        if (!data) return;
+        setActiveConvId(data.conv_id);
+        setConvMessages(data.messages || []);
+        if (data.media_id) {
+          const restored = {
+            videoId:     data.media_id,
+            media_id:    data.media_id,
+            title:       data.title || "Untitled",
+            sourceType:  data.source_type || "youtube",
+            source_type: data.source_type || "youtube",
+          };
+          setVideoId(data.media_id);
+          setVideoTitle(data.title || "Untitled");
+          setSourceType(data.source_type || "youtube");
+          setInputMode(
+            data.source_type === "docx"   ? "docx"
+            : data.source_type === "upload" ? "upload"
+            : "youtube"
+          );
+          if ((data.source_type || "youtube") === "youtube") {
+            setVideoUrl(`https://www.youtube.com/watch?v=${data.media_id}`);
+          }
+          setCurrentVideo(restored);
+        }
+      })
+      .catch(() => {});
+  }, [convId]); // eslint-disable-line react-hooks/exhaustive-deps
+
   useEffect(() => {
     if (!currentVideo) return;
+    // Only reset conv state when the media actually changes
+    const incomingId = currentVideo.videoId || currentVideo.media_id;
+    if (incomingId && incomingId !== videoId) {
+      setActiveConvId(null);
+      setConvMessages([]);
+    }
     setVideoId(currentVideo.videoId || currentVideo.media_id || "");
     setVideoTitle(currentVideo.title || "");
     setSourceType(currentVideo.sourceType || currentVideo.source_type || "youtube");
@@ -512,8 +555,12 @@ export default function VideoAnalysis({ currentVideo, setCurrentVideo, addToHist
                 user={user}
                 groqKey={groqKey}
                 onNeedKey={() => setShowKeyModal(true)}
-                convId={convId}
-                onConvCreated={onConvCreated}
+                convId={activeConvId}
+                initialMessages={convMessages}
+                onConvCreated={(conv) => {
+                  setActiveConvId(conv?.conv_id ?? null);
+                  onConvCreated?.(conv);
+                }}
                 onConvUpdated={onConvUpdated}
               />
             )}

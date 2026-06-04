@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useMemo } from "react";
 import { NavLink, useNavigate } from "react-router-dom";
-const API = process.env.REACT_APP_API_URL;
+import { apiFetch } from "../App";   // JWT-aware fetch
 
 const NAV = [
   { to: "/",        icon: "⬡", label: "Home" },
@@ -21,7 +21,7 @@ const ConvItem = React.memo(function ConvItem({
       onClick={isRenaming ? undefined : onSelect}
       title={conv.title}
     >
-      {conv.pinned && <span className="conv-pin-dot">📌</span>}
+      {conv.pinned && <span className="conv-pin-dot">🟢</span>}
 
       {isRenaming ? (
         <input
@@ -47,9 +47,9 @@ const ConvItem = React.memo(function ConvItem({
 
       {menuOpen && (
         <div className="conv-context-menu" ref={menuRef} onClick={e => e.stopPropagation()}>
-          <button onClick={onRenameStart}>✏️ Rename</button>
-          <button onClick={onPin}>{conv.pinned ? "📌 Unpin" : "📌 Pin"}</button>
-          <button className="danger" onClick={onDelete}>🗑 Delete</button>
+          <button onClick={onRenameStart}>Rename</button>
+          <button onClick={onPin}>{conv.pinned ? "Unpin" : "Pin"}</button>
+          <button className="danger" onClick={onDelete}>Delete</button>
         </div>
       )}
     </div>
@@ -86,7 +86,6 @@ export default function Sidebar({
   onConvRenamed,
   onConvDeleted,
   onConvPinned,
-  // Mobile control — passed from App
   mobileOpen,
   onMobileClose,
 }) {
@@ -101,10 +100,8 @@ export default function Sidebar({
   const renameRef = useRef(null);
   const menuRefs  = useRef({});
 
-  // Sync with parent
   useEffect(() => setConvList(conversations), [conversations]);
 
-  // Outside click for context menu
   useEffect(() => {
     const handler = e => {
       const el = menuRefs.current[menuOpen];
@@ -114,18 +111,16 @@ export default function Sidebar({
     return () => document.removeEventListener("mousedown", handler);
   }, [menuOpen]);
 
-  // Focus rename input
   useEffect(() => { if (renaming) renameRef.current?.focus(); }, [renaming]);
 
-  // Rename
   const startRename  = conv => { setMenuOpen(null); setRenaming(conv.conv_id); setRenameValue(conv.title); };
   const commitRename = async conv_id => {
     const title = renameValue.trim();
     setRenaming(null);
     if (!title) return;
     try {
-      const res = await fetch(`${API}/conversations/${conv_id}/rename`, {
-        method: "PATCH", headers: { "Content-Type": "application/json" },
+      const res = await apiFetch(`/conversations/${conv_id}/rename`, {
+        method: "PATCH",
         body: JSON.stringify({ title }),
       });
       if (res.ok) {
@@ -136,26 +131,24 @@ export default function Sidebar({
     } catch {}
   };
 
-  // Delete (optimistic)
   const handleDelete = async conv_id => {
     setMenuOpen(null);
     if (!window.confirm("Delete this conversation?")) return;
     const prev = convList;
     setConvList(p => p.filter(c => c.conv_id !== conv_id));
     try {
-      const res = await fetch(`${API}/conversations/${conv_id}`, { method: "DELETE" });
+      const res = await apiFetch(`/conversations/${conv_id}`, { method: "DELETE" });
       if (!res.ok) throw new Error();
       onConvDeleted?.(conv_id);
       if (activeConvId === conv_id) navigate("/");
     } catch { setConvList(prev); }
   };
 
-  // Pin
   const handlePin = async conv => {
     setMenuOpen(null);
     try {
-      const res = await fetch(`${API}/conversations/${conv.conv_id}/pin`, {
-        method: "PATCH", headers: { "Content-Type": "application/json" },
+      const res = await apiFetch(`/conversations/${conv.conv_id}/pin`, {
+        method: "PATCH",
         body: JSON.stringify({ pinned: !conv.pinned }),
       });
       if (res.ok) {
@@ -170,7 +163,6 @@ export default function Sidebar({
   };
 
   const handleNavClick = () => { onMobileClose?.(); };
-
   const grouped = useMemo(() => groupConvsByDate(convList), [convList]);
 
   return (

@@ -7,12 +7,14 @@ import os
 import re
 import time
 from contextlib import asynccontextmanager
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Literal, Optional
 
-from fastapi import Cookie, Depends, FastAPI, File, Form, HTTPException, Request, UploadFile
+from fastapi import Depends, FastAPI, File, Form, HTTPException, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
+from jose import JWTError, jwt
 from pydantic import BaseModel, field_validator
 
 from langchain_groq import ChatGroq
@@ -23,7 +25,6 @@ from app.database import (
     init_db, save_media, get_media,
     register_user, authenticate_user, upsert_user,
     get_user_by_id,
-    create_session_token, validate_session_token, revoke_session_token,
     add_history, get_history,
     create_conversation, get_conversation, get_conversation_by_token,
     list_conversations, append_messages, rename_conversation,
@@ -84,10 +85,11 @@ ALLOWED_ORIGINS = [
     if o.strip()
 ]
 
-# Set HTTPS_ONLY=1 in production to enable Secure + SameSite=None cookies
-HTTPS_ONLY     = os.getenv("HTTPS_ONLY", "0") == "1"
-COOKIE_NAME    = "cognira_session"
-COOKIE_MAX_AGE = 60 * 60 * 24 * 30   # 30 days in seconds
+# ── JWT ───────────────────────────────────────────────────────────────────────
+JWT_SECRET      = os.getenv("JWT_SECRET", "I_AM_A_STRONG_SECRET")
+print(JWT_SECRET)
+JWT_ALGORITHM   = "HS256"
+JWT_EXPIRE_DAYS = int(os.getenv("JWT_EXPIRE_DAYS", "30"))
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -109,19 +111,13 @@ async def lifespan(app: FastAPI):
 # App
 # ─────────────────────────────────────────────────────────────────────────────
 
-app = FastAPI(title="Cognira API", version="4.0.0", lifespan=lifespan)
+app = FastAPI(title="Cognira API", version="5.0.0", lifespan=lifespan)
 
-# ── IMPORTANT: middleware is applied in REVERSE registration order by Starlette.
-# CORSMiddleware must be added LAST so it runs FIRST and handles OPTIONS
-# preflight before any custom middleware can return a 4xx.
-#
-# Custom middlewares registered first (run last in the chain):
 from dotenv import load_dotenv
-load_dotenv() 
+load_dotenv()
 
 @app.middleware("http")
 async def limit_upload_size(request: Request, call_next):
-    # Skip size check for OPTIONS preflight — no body expected
     if request.method == "OPTIONS":
         return await call_next(request)
     cl = request.headers.get("content-length")
@@ -143,14 +139,13 @@ async def log_requests(request: Request, call_next):
     return response
 
 
-# CORSMiddleware added LAST so it wraps everything and handles OPTIONS first:
 app.add_middleware(
     CORSMiddleware,
     allow_origins=ALLOWED_ORIGINS,
-    allow_credentials=True,   # required for cookies
+    allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
-    expose_headers=["Set-Cookie"],
+    expose_headers=["Authorization"],
 )
 
 app.include_router(export_router)
@@ -162,36 +157,35 @@ app.include_router(export_router)
 
 @app.get("/health", tags=["ops"])
 def health():
-    return {"status": "ok", "version": "4.0.0"}
+    return {"status": "ok", "version": "5.0.0"}
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Cookie helpers
+# JWT helpers
 # ─────────────────────────────────────────────────────────────────────────────
 
-def _set_session_cookie(response: JSONResponse, token: str):
-    response.set_cookie(
-        key=COOKIE_NAME,
-        value=token,
-        max_age=COOKIE_MAX_AGE,
-        httponly=True,               # JS cannot read this cookie
-        samesite="lax",              # CSRF protection
-        secure=HTTPS_ONLY,           # True in prod (HTTPS only)
-        path="/",
-    )
+def _create_jwt(user_id: str) -> str:
+    """Mint a signed JWT that expires in JWT_EXPIRE_DAYS days."""
+    expire  = datetime.now(timezone.utc) + timedelta(days=JWT_EXPIRE_DAYS)
+    payload = {"sub": user_id, "exp": expire, "iat": datetime.now(timezone.utc)}
+    return jwt.encode(payload, JWT_SECRET, algorithm=JWT_ALGORITHM)
 
-def _clear_session_cookie(response: JSONResponse):
-    response.delete_cookie(COOKIE_NAME, path="/")
+
+def _decode_jwt(token: str) -> Optional[str]:
+    """Return user_id if token is valid and not expired, else None."""
+    try:
+        payload = jwt.decode(token, JWT_SECRET, algorithms=[JWT_ALGORITHM])
+        return payload.get("sub")
+    except JWTError:
+        return None
 
 
 def _get_session_token(request: Request) -> Optional[str]:
-    """Extract token from cookie or Authorization: Bearer header."""
-    token = request.cookies.get(COOKIE_NAME)
-    if not token:
-        auth = request.headers.get("Authorization", "")
-        if auth.startswith("Bearer "):
-            token = auth[7:].strip()
-    return token or None
+    """Extract JWT from  Authorization: Bearer <token>  header."""
+    auth = request.headers.get("Authorization", "")
+    if auth.startswith("Bearer "):
+        return auth[7:].strip()
+    return None
 
 
 def _require_user(request: Request) -> dict:
@@ -199,9 +193,12 @@ def _require_user(request: Request) -> dict:
     token = _get_session_token(request)
     if not token:
         raise HTTPException(status_code=401, detail="Not authenticated.")
-    user = validate_session_token(token)
+    user_id = _decode_jwt(token)
+    if not user_id:
+        raise HTTPException(status_code=401, detail="Token invalid or expired.")
+    user = get_user_by_id(user_id)
     if not user:
-        raise HTTPException(status_code=401, detail="Session expired. Please log in again.")
+        raise HTTPException(status_code=401, detail="User not found.")
     return user
 
 
@@ -245,56 +242,45 @@ class LoginRequest(BaseModel):
 
 @app.post("/auth/register", tags=["auth"])
 def auth_register(req: RegisterRequest):
-    """
-    Create a new account.
-    Returns user + sets a 30-day httpOnly session cookie.
-    """
+    """Create a new account. Returns user + a signed JWT."""
     try:
         user = register_user(req.name, req.email, req.password)
     except ValueError as e:
         raise HTTPException(status_code=409, detail=str(e))
 
-    token    = create_session_token(user["user_id"])
-    history  = get_history(user["user_id"], limit=50)
-    response = JSONResponse(content={**user, "history": history})
-    _set_session_cookie(response, token)
-    return response
+    token   = _create_jwt(user["user_id"])
+    history = get_history(user["user_id"], limit=50)
+    return JSONResponse(content={**user, "token": token, "history": history})
 
 
 @app.post("/auth/login", tags=["auth"])
 def auth_login(req: LoginRequest):
-    """
-    Verify credentials.
-    Returns user + sets a 30-day httpOnly session cookie.
-    Fast: single DB lookup + bcrypt verify.
-    """
+    """Verify credentials. Returns user + a signed JWT."""
     try:
         user = authenticate_user(req.email, req.password)
     except ValueError as e:
-        # Same HTTP status for wrong pw and unknown email — prevents user enumeration
         raise HTTPException(status_code=401, detail=str(e))
 
-    token    = create_session_token(user["user_id"])
-    history  = get_history(user["user_id"], limit=50)
-    response = JSONResponse(content={**user, "history": history})
-    _set_session_cookie(response, token)
-    return response
+    token   = _create_jwt(user["user_id"])
+    history = get_history(user["user_id"], limit=50)
+    return JSONResponse(content={**user, "token": token, "history": history})
 
 
 @app.get("/auth/me", tags=["auth"])
 def auth_me(request: Request):
     """
-    Fast session-restore endpoint.
-    Frontend calls this on page load; if the cookie is valid it gets the full
-    user + history in one request — no password round-trip.
-    Returns 401 if no valid session (frontend should show login page).
+    Fast session-restore. Frontend calls this on page load with the stored JWT.
+    Returns user + history if token is valid, else 401.
     """
     token = _get_session_token(request)
     if not token:
         raise HTTPException(status_code=401, detail="Not authenticated.")
-    user = validate_session_token(token)
+    user_id = _decode_jwt(token)
+    if not user_id:
+        raise HTTPException(status_code=401, detail="Token invalid or expired.")
+    user = get_user_by_id(user_id)
     if not user:
-        raise HTTPException(status_code=401, detail="Session expired.")
+        raise HTTPException(status_code=401, detail="User not found.")
     history = get_history(user["user_id"], limit=50)
     return {**user, "history": history}
 
@@ -302,17 +288,13 @@ def auth_me(request: Request):
 @app.post("/auth/logout", tags=["auth"])
 def auth_logout(request: Request):
     """
-    Revoke server-side token and clear the cookie.
+    JWTs are stateless — the client simply discards the token.
+    This endpoint exists for API symmetry and future blocklist support.
     """
-    token = _get_session_token(request)
-    if token:
-        revoke_session_token(token)
-    response = JSONResponse(content={"ok": True})
-    _clear_session_cookie(response)
-    return response
+    return JSONResponse(content={"ok": True})
 
 
-# Legacy sign-in kept for backward-compat (e.g. existing frontend builds)
+# Legacy passwordless sign-in kept for backward-compat
 class SignInRequest(BaseModel):
     name:  str
     email: str
@@ -333,34 +315,20 @@ class SignInRequest(BaseModel):
 
 @app.post("/auth/signin", tags=["auth"])
 def sign_in_legacy(req: SignInRequest):
-    """
-    Passwordless legacy sign-in — kept for compatibility.
-    New clients should use /auth/register + /auth/login.
-    """
     import hashlib
     user_id = hashlib.sha256(f"{req.email}:{req.name}".encode()).hexdigest()[:32]
     upsert_user(user_id, req.name, req.email)
-    token    = create_session_token(user_id)
-    response = JSONResponse(content={"user_id": user_id, "name": req.name, "email": req.email})
-    _set_session_cookie(response, token)
-    return response
+    token = _create_jwt(user_id)
+    return JSONResponse(content={"user_id": user_id, "name": req.name, "email": req.email, "token": token})
 
 
 @app.post("/auth/signout", tags=["auth"])
 def sign_out_legacy(request: Request):
-    token = _get_session_token(request)
-    if token:
-        revoke_session_token(token)
-    response = JSONResponse(content={"ok": True})
-    _clear_session_cookie(response)
-    return response
+    return JSONResponse(content={"ok": True})
+
 
 @app.get("/transcript/{video_id}", tags=["transcript"])
 def get_transcript(video_id: str):
-    """
-    Fetch YouTube transcript via Supadata (no IP blocks).
-    Frontend calls this instead of YouTube directly.
-    """
     import requests
     api_key = os.getenv("SUPADATA_API_KEY", "")
     if not api_key:
@@ -376,7 +344,6 @@ def get_transcript(video_id: str):
         if not res.ok:
             raise HTTPException(status_code=res.status_code, detail="Transcript unavailable.")
         data = res.json()
-        # Normalize to [{"text": "...", "start": 123}, ...]
         content = data.get("content", [])
         transcript = [
             {"text": item.get("text", "").strip(), "start": int(item.get("offset", 0) / 1000)}
@@ -388,7 +355,8 @@ def get_transcript(video_id: str):
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
-    
+
+
 # ─────────────────────────────────────────────────────────────────────────────
 # History endpoints
 # ─────────────────────────────────────────────────────────────────────────────
@@ -409,6 +377,7 @@ def user_history(user_id: str, limit: int = 50):
 def add_history_entry(req: HistoryAddRequest):
     add_history(req.user_id, req.media_id, req.title, req.source_type)
     return {"ok": True}
+
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Request models
@@ -613,8 +582,8 @@ def conv_create(req: ConvCreateRequest):
 
 @app.get("/conversations/{user_id}", tags=["conversations"])
 def conv_list(user_id: str, media_id: str | None = None):
-    return {"conversations": list_conversations(user_id, media_id)}
-
+    # media_id is optional — omit to list ALL conversations for this user
+    return {"conversations": list_conversations(user_id, media_id or None)}
 
 @app.get("/conversation/{conv_id}", tags=["conversations"])
 def conv_get(conv_id: str):
@@ -764,20 +733,12 @@ async def ingest_media(
         title=meta.get("title"), word_count=word_count, truncated=truncated,
     )
 
-# ─────────────────────────────────────────────────────────────────────────────
-# ADD THESE TWO ENDPOINTS TO app/main.py
-# Place them right after the existing /ingest endpoint
-# ─────────────────────────────────────────────────────────────────────────────
 
-# ── 1. Ingest pre-fetched transcript (sent from browser) ──────────────────
-#
-# The frontend fetches the YouTube transcript using the user's own IP
-# (never blocked), then POSTs it here. We build the vectorstore from
-# the provided text — no YouTube API call needed server-side.
+# ── Ingest pre-fetched transcript ─────────────────────────────────────────────
 
 class IngestTextRequest(BaseModel):
     video_id:   str
-    transcript: list[dict]   # [{"text": "...", "start": 123}, ...]
+    transcript: list[dict]
     title:      str | None = None
 
     @field_validator("video_id")
@@ -791,14 +752,8 @@ class IngestTextRequest(BaseModel):
 
 @app.post("/ingest_text", tags=["ingest"])
 def ingest_text(req: IngestTextRequest):
-    """
-    Receive a pre-fetched transcript from the browser and build a vectorstore.
-    Called after the frontend fetches the YouTube transcript using the user's IP.
-    Idempotent — safe to call multiple times for the same video_id.
-    """
     from langchain_core.documents import Document
 
-    # Skip if vectorstore already exists
     if _vectorstore_exists_on_disk(req.video_id):
         log.info("Vectorstore already exists for %s — skipping rebuild", req.video_id)
         return {"ok": True, "media_id": req.video_id, "chunks": 0, "cached": True}
@@ -806,7 +761,6 @@ def ingest_text(req: IngestTextRequest):
     if not req.transcript:
         raise HTTPException(status_code=400, detail="Transcript is empty.")
 
-    # Build docs from provided transcript
     docs = [
         Document(
             page_content=item["text"].replace("\n", " ").strip(),
@@ -819,7 +773,6 @@ def ingest_text(req: IngestTextRequest):
     if not docs:
         raise HTTPException(status_code=400, detail="No usable text in transcript.")
 
-    # Save to transcript cache so /ask_stream fallback also finds it
     from app.transcript_cache import save_transcript
     save_transcript(req.video_id, [{"text": d.page_content, "start": d.metadata["start"]} for d in docs])
 
@@ -830,7 +783,6 @@ def ingest_text(req: IngestTextRequest):
         log.exception("Vectorstore build failed for %s", req.video_id)
         raise HTTPException(status_code=500, detail=f"Vectorstore build failed: {e}")
 
-    # Register in media DB
     register_media(req.video_id, {
         "media_id":    req.video_id,
         "source_type": "youtube",
@@ -843,10 +795,7 @@ def ingest_text(req: IngestTextRequest):
     return {"ok": True, "media_id": req.video_id, "chunks": len(chunks), "cached": False}
 
 
-# ── 2. Retrieve relevant docs (vectorstore query) ────────────────────────
-#
-# The frontend calls this to get relevant context, then sends it directly
-# to Groq using the user's own API key. The LLM call never touches the server.
+# ── Retrieve relevant docs ────────────────────────────────────────────────────
 
 class RetrieveRequest(BaseModel):
     video_id: str
@@ -874,11 +823,6 @@ class RetrieveRequest(BaseModel):
 
 @app.post("/retrieve", tags=["rag"])
 def retrieve_docs(req: RetrieveRequest):
-    """
-    Retrieve relevant document chunks from the vectorstore.
-    Returns serializable doc list — the browser uses these as context
-    for its direct Groq API call.
-    """
     db = get_or_create_vectorstore(req.video_id, docs_builder=_build_docs)
 
     if db is None:
@@ -887,16 +831,14 @@ def retrieve_docs(req: RetrieveRequest):
     docs = hybrid_retrieve(db, req.question, k=req.k)
     docs = rerank_docs_by_timestamp_density(docs)
 
-    # Serialize for JSON response
     serialized = [
-        {
-            "page_content": doc.page_content,
-            "metadata":     doc.metadata,
-        }
+        {"page_content": doc.page_content, "metadata": doc.metadata}
         for doc in docs
     ]
 
     return {"docs": serialized, "video_id": req.video_id}
+
+
 # ─────────────────────────────────────────────────────────────────────────────
 # Media / Doc
 # ─────────────────────────────────────────────────────────────────────────────
