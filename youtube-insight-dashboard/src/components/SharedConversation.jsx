@@ -52,7 +52,7 @@ export default function SharedConversation() {
     <div className="page-grid">
       <div className="card">
         <div className="status-box status-error">⚠ {error}</div>
-        <Link to="/" className="btn btn-secondary mt-16" style={{ display: "inline-flex" }}>← Back to Cognira</Link>
+        <Link to="/" className="btn btn-secondary mt-16" style={{ display: "inline-flex" }}>← Back to CogniraAI</Link>
       </div>
     </div>
   );
@@ -100,7 +100,7 @@ export default function SharedConversation() {
         <p className="body" style={{ marginBottom: 12 }}>
           Want to analyze your own content?
         </p>
-        <Link to="/" className="btn btn-primary">Try Cognira free →</Link>
+        <Link to="/" className="btn btn-primary">Try CogniraAI free →</Link>
       </div>
     </div>
   );

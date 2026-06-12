@@ -10,7 +10,7 @@ const Settings = ({ isSignedIn, user, onOpenAuth, onSignOut }) => {
         </div>
 
         <h1 className="hero-title">
-          <span className="gradient-text">Your Cognira profile</span>
+          <span className="gradient-text">Your CogniraAI profile</span>
         </h1>
 
         <p className="hero-subtitle">

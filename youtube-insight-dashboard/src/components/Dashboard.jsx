@@ -30,7 +30,7 @@ export default function Dashboard({ videoHistory, setCurrentVideo, user, onOpenA
           </h1>
           <p className="body" style={{ maxWidth: 500 }}>
             Paste a YouTube URL, upload audio or video, or drop a Word document.
-            Cognira builds transcript intelligence and gives you instant answers, chapters, quizzes, and exportable notes.
+            CogniraAI builds transcript intelligence and gives you instant answers, chapters, quizzes, and exportable notes.
           </p>
         </div>
 

@@ -59,7 +59,7 @@ function MobileTopBar({ onMenuOpen }) {
     <div className="mobile-topbar">
       <div className="mobile-topbar-logo">
         <span />
-        Cognira
+        CogniraAI
       </div>
       <button className="mobile-menu-btn" onClick={onMenuOpen} aria-label="Open menu">
         ☰
@@ -314,7 +314,7 @@ function AuthModal({ onRegister, onLogin, onClose }) {
       <div className="modal" onClick={e => e.stopPropagation()}>
         <button className="modal-close" onClick={onClose}>✕</button>
 
-        <div className="modal-brand">Cognira</div>
+        <div className="modal-brand">CogniraAI</div>
         <div className="modal-title">{tab === "login" ? "Welcome back" : "Create account"}</div>
         <div className="modal-sub">
           {tab === "login" ? "Sign in to sync your sessions." : "Start analysing content with AI."}

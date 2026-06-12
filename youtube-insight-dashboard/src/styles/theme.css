@@ -14,9 +14,9 @@
   --bg-overlay:      #1d1d22;
   --bg-hover:        #23232a;
 
-  --accent:          #e8a838;
-  --accent-dim:      rgba(232, 168, 56, 0.14);
-  --accent-border:   rgba(232, 168, 56, 0.28);
+  --accent:          #2dd4bf;
+  --accent-dim:      rgba(45, 212, 191, 0.14);
+  --accent-border:   rgba(45, 212, 191, 0.28);
 
   --green-brand:     #1bbb9e;
   --green-deep:      #0e3d35;
@@ -235,13 +235,8 @@ body {
   gap: 8px;
 }
 
-.sidebar-logo-dot {
-  width: 8px; height: 8px;
-  background: var(--green-brand);
-  border-radius: 50%;
-  flex-shrink: 0;
-  box-shadow: 0 0 12px var(--green-brand), 0 0 4px var(--green-brand);
-  animation: dotPulse 3s ease-in-out infinite;
+.sidebar-logo img {
+  filter: drop-shadow(0 0 6px rgba(27,187,158,0.6));
 }
 @keyframes dotPulse {
   0%, 100% { box-shadow: 0 0 12px var(--green-brand), 0 0 4px var(--green-brand); }
@@ -249,6 +244,7 @@ body {
 }
 
 .sidebar-tagline {
+  margin-top: 4px;
   font-size: 10.5px;
   color: var(--text-tertiary);
   letter-spacing: 0.08em;
@@ -310,7 +306,14 @@ body {
   color: var(--green-brand);
   border-color: var(--green-border);
 }
-
+.logo-dot {
+  width: 8px; height: 8px;
+  background: var(--green-brand);
+  border-radius: 50%;
+  flex-shrink: 0;
+  box-shadow: 0 0 12px var(--green-brand), 0 0 4px var(--green-brand);
+  /* animation: dotPulse 3s ease-in-out infinite; */
+}
 .nav-icon { font-size: 15px; width: 20px; text-align: center; flex-shrink: 0; }
 
 /* ── Conversations panel ─────────────────────────────────────── */
@@ -618,6 +621,7 @@ body {
 .btn:disabled { opacity: 0.4; cursor: not-allowed; }
 
 .btn-primary {
+  margin-top: 6px;
   background: var(--green-brand);
   color: var(--text-inverse);
 }

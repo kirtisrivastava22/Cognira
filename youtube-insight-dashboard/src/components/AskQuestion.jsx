@@ -388,8 +388,10 @@ export default function AskQuestion({
       const a    = Object.assign(document.createElement("a"), { href: url });
       const disp = exportRes.headers.get("Content-Disposition") || "";
       a.download = disp.includes("filename=") ? disp.split("filename=")[1].replace(/"/g, "") : `${videoId}_notes.docx`;
-      document.body.appendChild(a); a.click();
-      URL.revokeObjectURL(url); document.body.removeChild(a);
+      document.body.appendChild(a); 
+      a.click(); // simulates a click on the link to trigger the download
+      URL.revokeObjectURL(url); 
+      document.body.removeChild(a);
 
     } catch (e) {
       setError(e.message || "Export failed.");

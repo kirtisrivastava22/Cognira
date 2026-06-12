@@ -21,7 +21,7 @@ const ConvItem = React.memo(function ConvItem({
       onClick={isRenaming ? undefined : onSelect}
       title={conv.title}
     >
-      {conv.pinned && <span className="conv-pin-dot">🟢</span>}
+      {conv.pinned && <span className="logo-dot"/>}
 
       {isRenaming ? (
         <input
@@ -172,8 +172,8 @@ export default function Sidebar({
       <div className="sidebar-brand">
         <div className="sidebar-brand-left">
           <div className="sidebar-logo">
-            <span className="sidebar-logo-dot" />
-            {!collapsed && "Cognira"}
+            <img src="/favicon.svg" style={{ width: 20, height: 20 }}  alt="C"/>
+            {!collapsed && "CogniraAI"}
           </div>
           {!collapsed && <div className="sidebar-tagline">Content intelligence</div>}
         </div>

@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
+  <rect width="100" height="100" rx="20" fill="#080809"/>
+  
+  <!-- Eyes -->
+  <circle cx="35" cy="42" r="10" fill="#1bbb9e"/>
+  <circle cx="65" cy="42" r="10" fill="#1bbb9e"/>
+  
+  <!-- Pupils -->
+  <circle cx="35" cy="42" r="4" fill="#080809"/>
+  <circle cx="65" cy="42" r="4" fill="#080809"/>
+  
+  <!-- Beak -->
+  <polygon points="50,55 44,68 56,68" fill="#1bbb9e"/>
+</svg>
