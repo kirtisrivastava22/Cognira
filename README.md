@@ -3,6 +3,7 @@
 Paste a YouTube URL, upload audio or video, or drop a Word document. Cognira builds transcript intelligence and gives you instant answers, chapters, quizzes, and exportable notes.
 
 > An AI-powered content intelligence platform — users can query any video, audio, or document using RAG with hybrid retrieval and get cited, hallucination-guarded answers.
+Cognira isn’t just a chatbot — it’s a thinking layer over content.
 
 ---
 
@@ -83,7 +84,6 @@ Unlike basic chat apps, Cognira focuses on:
 
 ### 🔌 **Multi-Platform**
 - **Web Dashboard**: Full-featured React application
-- **Chrome Extension**: Seamless YouTube integration
 - **REST API**: Programmatic access for developers
 
 ---
@@ -147,13 +147,6 @@ Unlike basic chat apps, Cognira focuses on:
 - **Streaming API** - Server-Sent Events for real-time responses
 - **LocalStorage** - Client-side data persistence
 
-### **Chrome Extension**
-- **Manifest V3** - Modern extension API
-- **Content Scripts** - YouTube page integration
-- **Background Service Worker** - Persistent state management
-
----
-
 ## 🚀 Quick Start
 
 ### **Prerequisites**
@@ -203,17 +196,6 @@ npm start
 ```
 
 Dashboard opens at: `http://localhost:3000`
-
-### **4. Extension Setup**
-```bash
-cd youtube-rag-extension
-
-# Load in Chrome
-1. Open chrome://extensions
-2. Enable "Developer mode"
-3. Click "Load unpacked"
-4. Select the extension folder
-```
 
 ---
 
@@ -318,7 +300,7 @@ def rerank_by_timestamp_density(docs):
 ## 📁 Project Structure
 
 ```
-youtube-insight-assistant/
+cognira/
 ├── youtube-rag-backend/          # FastAPI backend
 │   ├── app/
 │   │   ├── main.py              # API endpoints
@@ -346,12 +328,6 @@ youtube-insight-assistant/
 │   ├── package.json
 │   └── README.md
 │
-├── youtube-rag-extension/        # Chrome extension
-│   ├── manifest.json
-│   ├── popup.html
-│   ├── popup.js
-│   ├── popup.css
-│   └── icons/
 │
 ├── docs/                         # Documentation
 │   ├── API.md
@@ -402,16 +378,6 @@ npm run build
 # Deploy the build/ folder
 ```
 
-### **Extension (Chrome Web Store)**
-```bash
-# Package extension
-cd youtube-rag-extension
-zip -r extension.zip *
-# Upload to Chrome Web Store
-```
-
----
-
 ## 🔒 Security & Privacy
 
 - ✅ No user data stored on servers
@@ -438,14 +404,9 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for details.
 
 ## 📈 Future Roadmap
 
-- [ ] **Multi-language support** (Spanish, French, German)
-- [ ] **Video summarization** with bullet points
-- [ ] **Collaborative annotations** for teams
-- [ ] **API rate limiting** and authentication
-- [ ] **Mobile app** (React Native)
+- [ ] **Multiple input format** for docx
 - [ ] **Voice input** for questions
 - [ ] **Playlist analysis** for course series
-- [ ] **Integration with Notion/Obsidian**
 
 ## 🙏 Acknowledgments
 
@@ -453,3 +414,9 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for details.
 - [Groq](https://groq.com) for fast LLM inference
 - [FAISS](https://github.com/facebookresearch/faiss) for vector search
 - [FastAPI](https://fastapi.tiangolo.com) for backend framework
+
+ ⭐ Final Thought
+
+Cognira isn’t just a chatbot — it’s a thinking layer over content.
+
+If you like this project, ⭐ the repo and share it!
