@@ -47,8 +47,9 @@ def _get_llm():
 @dataclass
 class Chapter:
     title:       str
-    start_time:  int            # seconds
-    timestamp:   str            # "mm:ss"
+    start_time:  int            # seconds for video/audio, paragraph index for docx
+    timestamp:   str            # "mm:ss" / "h:mm:ss" for video, "Para N" for docx
+    ref_type:    str = "video"  # "video" | "docx" — tells the frontend how to use start_time
     summary:     str = ""       # 1-sentence summary of what happens in this chapter
     key_topics:  list[str] = field(default_factory=list)   # 2-3 keywords for UI tags
 
@@ -67,8 +68,21 @@ class ChapterResult:
 # ─────────────────────────────────────────────────────────────────────────────
 
 def _fmt(seconds: int) -> str:
-    m, s = divmod(int(seconds), 60)
+    """MM:SS under an hour, H:MM:SS beyond — keeps chapter timestamps
+    consistent with the citation format used elsewhere (see rag.format_timestamp)."""
+    seconds = max(0, int(seconds))
+    h, rem = divmod(seconds, 3600)
+    m, s = divmod(rem, 60)
+    if h:
+        return f"{h}:{m:02d}:{s:02d}"
     return f"{m:02d}:{s:02d}"
+
+
+def _is_docx_docs(docs: list[Document]) -> bool:
+    """docx docs carry metadata['source'] == 'docx' and metadata['paragraph'],
+    never metadata['start'] — that's what makes time-based bucketing collapse
+    everything into one 00:00 chapter, so we branch to paragraph bucketing instead."""
+    return bool(docs) and docs[0].metadata.get("source") == "docx"
 
 
 def _clean_json(raw: str) -> str:
@@ -154,6 +168,69 @@ def bucket_transcript(
     return _merge_short_buckets(buckets, min_words)
 
 
+def bucket_paragraphs(
+    docs:            list[Document],
+    paragraphs_per_chapter: int = 6,
+    max_chapters:    int = 7,
+    min_words:       int = 40,
+) -> list[dict]:
+    """
+    Paragraph-count analogue of bucket_transcript, for docx docs which have
+    no time axis. Splits every `paragraphs_per_chapter` paragraphs (or
+    sooner on a topic-shift signal), same merge-short-buckets cleanup.
+
+    Each bucket's "start_time" holds the FIRST paragraph number in that
+    chapter (int) and "timestamp" holds a human label "Para N" — mirrors
+    bucket_transcript's start_time (seconds) / timestamp (mm:ss) shape so
+    detect_chapters_from_docs can stay source-agnostic downstream.
+    """
+    if not docs:
+        return []
+
+    docs = sorted(docs, key=lambda d: d.metadata.get("paragraph", 0))
+
+    buckets: list[dict] = []
+    current_texts: list[str] = []
+    current_start_para = docs[0].metadata.get("paragraph", 0)
+    paras_since_split = 0
+    last_para_seen = current_start_para
+
+    for doc in docs:
+        para = doc.metadata.get("paragraph", last_para_seen)
+        text = doc.page_content
+
+        paras_since_split = para - current_start_para
+        trigger_count    = paras_since_split >= paragraphs_per_chapter
+        trigger_semantic = paras_since_split >= 2 and _has_topic_shift(text)
+
+        if (trigger_count or trigger_semantic) and current_texts:
+            buckets.append({
+                "start_time": current_start_para,
+                "timestamp":  f"Para {current_start_para}",
+                "text":       " ".join(current_texts),
+            })
+            if len(buckets) >= max_chapters:
+                remaining = docs[docs.index(doc):]
+                buckets[-1]["text"] += " " + " ".join(d.page_content for d in remaining)
+                return _merge_short_buckets(buckets, min_words)
+
+            current_texts = []
+            current_start_para = para
+            last_para_seen = para
+
+        current_texts.append(text)
+        last_para_seen = para
+
+    if current_texts:
+        buckets.append({
+            "start_time": current_start_para,
+            "timestamp":  f"Para {current_start_para}",
+            "text":       " ".join(current_texts),
+        })
+
+    return _merge_short_buckets(buckets, min_words)
+
+
 def _merge_short_buckets(buckets: list[dict], min_words: int) -> list[dict]:
     """Merge any bucket with too few words into the previous one."""
     merged = []
@@ -196,7 +273,7 @@ JSON:"""
 )
 
 
-def _llm_title_for_bucket(bucket: dict, idx: int) -> Chapter:
+def _llm_title_for_bucket(bucket: dict, idx: int, ref_type: str = "video") -> Chapter:
     """
     Call the LLM to generate title + summary + key_topics for one bucket.
     Falls back to safe defaults if anything fails.
@@ -232,6 +309,7 @@ def _llm_title_for_bucket(bucket: dict, idx: int) -> Chapter:
         title      = title,
         start_time = int(bucket["start_time"]),
         timestamp  = bucket["timestamp"],
+        ref_type   = ref_type,
         summary    = summary,
         key_topics = key_topics,
     )
@@ -264,13 +342,21 @@ def detect_chapters_from_docs(
         result.error = "No transcript available."
         return result
 
-    buckets = bucket_transcript(docs, window_sec=window_sec, max_chapters=max_chapters)
+    is_docx = _is_docx_docs(docs)
+
+    if is_docx:
+        # docx docs have no metadata['start'] — bucket_transcript would silently
+        # collapse them into a single 00:00 chapter, so use paragraph counts instead.
+        buckets = bucket_paragraphs(docs, max_chapters=max_chapters)
+    else:
+        buckets = bucket_transcript(docs, window_sec=window_sec, max_chapters=max_chapters)
 
     if not buckets:
         result.error = "Could not segment the transcript into chapters."
         return result
 
-    chapters = [_llm_title_for_bucket(b, i) for i, b in enumerate(buckets)]
+    ref_type = "docx" if is_docx else "video"
+    chapters = [_llm_title_for_bucket(b, i, ref_type=ref_type) for i, b in enumerate(buckets)]
     result.chapters = chapters
     return result
 

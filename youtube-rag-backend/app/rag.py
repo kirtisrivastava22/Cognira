@@ -1,13 +1,5 @@
 import os
 
-import torch
-from transformers import (
-    AutoTokenizer,
-    AutoModelForCausalLM,
-    pipeline,
-    BitsAndBytesConfig
-)
-
 from langchain_groq import ChatGroq
 from langchain_core.documents import Document
 from langchain_text_splitters import RecursiveCharacterTextSplitter
@@ -200,12 +192,53 @@ def rerank_docs_by_timestamp_density(docs):
 # FORMAT DOCS FOR PROMPT
 # =========================
 
+def format_timestamp(seconds: int) -> str:
+    """
+    Format seconds as MM:SS for videos under an hour, H:MM:SS beyond that.
+
+    Minutes/seconds are always zero-padded to 2 digits so downstream
+    regexes (TIMESTAMP_RE) can rely on a fixed-width [MM:SS] / [H:MM:SS]
+    shape no matter how long the video is. Without the hour rollover,
+    a video past 99 minutes would produce e.g. "[105:23]", which
+    TIMESTAMP_RE below (and the old \\d{2} regex) can't match.
+    """
+    seconds = max(0, int(seconds))
+    h, rem = divmod(seconds, 3600)
+    m, s = divmod(rem, 60)
+    if h:
+        return f"{h}:{m:02d}:{s:02d}"
+    return f"{m:02d}:{s:02d}"
+
+
+# Matches [MM:SS] or [H:MM:SS]. MM/SS are exactly 2 digits when part of the
+# H:MM:SS form; the leading number is 1-4 digits when there's no hour group,
+# because llama-3.1-8b-instant doesn't reliably preserve the "1:56:10"
+# structure when citing from the excerpts — it commonly flattens it back to
+# raw total minutes, e.g. "[116:10]" instead of "[1:56:10]" (116 min = 1h56m,
+# seconds preserved correctly). Both shapes must parse to the same seconds.
+TIMESTAMP_RE = re.compile(r'\[(\d{1,4}):(\d{2})(?::(\d{2}))?\]')
+
+
+def parse_timestamp_match(match) -> int:
+    """
+    Convert a TIMESTAMP_RE match into total seconds.
+    Three groups (a:b:c) -> H:MM:SS.
+    Two groups (a:b)     -> MM:SS, where `a` may itself be >99 if the LLM
+                             flattened the hour component into raw minutes.
+    """
+    a, b, c = match.group(1), match.group(2), match.group(3)
+    if c is not None:
+        return int(a) * 3600 + int(b) * 60 + int(c)
+    return int(a) * 60 + int(b)
+
+
 def format_docs_with_references(docs):
     """
     Format retrieved docs for the LLM prompt.
 
-    docx docs  → [para N] prefix  (paragraph number from metadata)
-    video docs → [MM:SS] prefix   (timestamp from metadata)
+    docx docs  → [para N] prefix       (paragraph number from metadata)
+    video docs → [MM:SS] / [H:MM:SS]   (timestamp from metadata, hour-aware
+                                         so citations stay parseable on long videos)
 
     The LLM is instructed to cite these exact tags inline, which the
     frontend regex then converts to clickable buttons.
@@ -221,8 +254,7 @@ def format_docs_with_references(docs):
             formatted.append(f"[para {para}] {doc.page_content}")
         else:
             ts = doc.metadata.get("start", 0)
-            mm, ss = divmod(int(ts), 60)
-            formatted.append(f"[{mm:02d}:{ss:02d}] {doc.page_content}")
+            formatted.append(f"[{format_timestamp(ts)}] {doc.page_content}")
 
     return "\n\n".join(formatted)
 
@@ -238,7 +270,7 @@ RULES — follow every single one:
 1. Use ONLY facts stated in the transcript. No outside knowledge. No inference. No guessing.
 2. If the transcript does not clearly answer the question, reply exactly: I don't know
 3. Every factual claim must include an inline reference taken EXACTLY from the excerpt header:
-   - For video/audio: use [MM:SS] e.g. [02:34]
+   - For video/audio: copy the reference exactly as it appears in the excerpt header — [MM:SS] e.g. [02:34], or [H:MM:SS] for longer videos e.g. [1:15:23]
    - For documents:   use [para N] e.g. [para 3]
    Always use square brackets. Never omit the reference.
 4. Keep answers to 2-5 sentences.
@@ -274,8 +306,8 @@ def _looks_like_hallucination(answer: str, docs) -> bool:
     if not answer or "i don't know" in answer.lower():
         return False
 
-    answer_timestamps = re.findall(r'\[(\d{2}):(\d{2})\]', answer)
-    if not answer_timestamps:
+    answer_matches = list(TIMESTAMP_RE.finditer(answer))
+    if not answer_matches:
         return False   # no timestamp citations — cannot judge
 
     doc_seconds = set()
@@ -283,8 +315,8 @@ def _looks_like_hallucination(answer: str, docs) -> bool:
         ts = int(doc.metadata.get("start", 0))
         doc_seconds.add(ts)
 
-    for (mm, ss) in answer_timestamps:
-        cited_sec = int(mm) * 60 + int(ss)
+    for match in answer_matches:
+        cited_sec = parse_timestamp_match(match)
         if any(abs(cited_sec - ds) <= 15 for ds in doc_seconds):
             return False   # at least one valid match found
 
@@ -342,19 +374,17 @@ def ask_youtube_video(video_id, question):
     timestamps = []
     seen_seconds = set()
 
-    inline_ts = re.findall(r'\[(\d{2}):(\d{2})\]', answer)
-    for mm, ss in inline_ts:
-        seconds = int(mm) * 60 + int(ss)
+    for match in TIMESTAMP_RE.finditer(answer):
+        seconds = parse_timestamp_match(match)
         if not any(abs(seconds - s) < 30 for s in seen_seconds):
             seen_seconds.add(seconds)
-            timestamps.append({"seconds": seconds, "display": f"{mm}:{ss}"})
+            timestamps.append({"seconds": seconds, "display": format_timestamp(seconds)})
 
     for doc in docs:
         ts = int(doc.metadata.get("start", 0))
         if not any(abs(ts - s) < 30 for s in seen_seconds):
             seen_seconds.add(ts)
-            mm2, ss2 = divmod(ts, 60)
-            timestamps.append({"seconds": ts, "display": f"{mm2:02d}:{ss2:02d}"})
+            timestamps.append({"seconds": ts, "display": format_timestamp(ts)})
         if len(timestamps) >= 5:
             break
 

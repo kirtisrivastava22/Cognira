@@ -87,7 +87,6 @@ ALLOWED_ORIGINS = [
 
 # ── JWT ───────────────────────────────────────────────────────────────────────
 JWT_SECRET      = os.getenv("JWT_SECRET", "I_AM_A_STRONG_SECRET")
-print(JWT_SECRET)
 JWT_ALGORITHM   = "HS256"
 JWT_EXPIRE_DAYS = int(os.getenv("JWT_EXPIRE_DAYS", "30"))
 
@@ -462,7 +461,7 @@ ABSOLUTE RULES:
 1. Use ONLY information stated in the provided excerpts. Zero outside knowledge.
 2. If the excerpts do not clearly contain the answer, reply with exactly: I don't know
 3. Every factual claim MUST include an inline reference:
-   - Video/audio: [MM:SS]  e.g. [02:34]
+   - Video/audio: copy the reference exactly as shown — [MM:SS] e.g. [02:34], or [H:MM:SS] for longer videos e.g. [1:15:23]
    - Documents:   [para N] e.g. [para 3]
 4. Do NOT invent, infer, extrapolate, or guess.
 5. Keep your answer to 2–5 sentences.
@@ -677,8 +676,8 @@ async def ingest_media(
         }
 
     else:
-        filename     = file.filename or "upload"
-        content_type = file.content_type
+        filename     = file.filename or "upload" if file else "upload"
+        content_type = file.content_type if file else None
         ext          = Path(filename).suffix.lower()
 
         if ext not in ALLOWED_EXTENSIONS:

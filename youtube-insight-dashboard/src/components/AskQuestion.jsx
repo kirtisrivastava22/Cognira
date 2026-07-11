@@ -3,17 +3,37 @@ import { apiFetch } from "../App";   // JWT-aware fetch
 
 const API = process.env.REACT_APP_API_URL || "";
 
-// Single-pass ref rendering: [para N] → teal button, [MM:SS] → amber button
-const COMBINED_RE = /\[para(?:graph)?\s*(\d+)\]|\[(\d{1,2}):(\d{2})\]/gi;
+// Hour-aware timestamp formatting/parsing — mirrors rag.py's format_timestamp /
+// TIMESTAMP_RE on the backend. Needed here because this component builds its
+// own excerpts and citations entirely client-side (talks to Groq directly),
+// so it doesn't inherit the backend fix.
+function formatTimestamp(seconds) {
+  seconds = Math.max(0, Math.trunc(seconds));
+  const h = Math.floor(seconds / 3600);
+  const m = Math.floor((seconds % 3600) / 60);
+  const s = seconds % 60;
+  const mm = String(m).padStart(2, "0");
+  const ss = String(s).padStart(2, "0");
+  return h ? `${h}:${mm}:${ss}` : `${mm}:${ss}`;
+}
+
+// Single-pass ref rendering: [para N] → teal button, [MM:SS]/[H:MM:SS] → amber button.
+// The (\d{1,4}) leading group (no hour separator) tolerates the model flattening
+// hours into raw minutes when it cites (e.g. "[116:10]" for 1h56m10s) — same
+// leniency as the backend's TIMESTAMP_RE, so long-video citations still render
+// as clickable badges instead of falling through as plain bracket text.
+const COMBINED_RE = /\[para(?:graph)?\s*(\d+)\]|\[(?:(\d{1,2}):(\d{2}):(\d{2})|(\d{1,4}):(\d{2}))\]/gi;
 
 function renderAnswer(raw) {
   const escaped = raw.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
-  return escaped.replace(COMBINED_RE, (match, paraNum, mm, ss) => {
+  return escaped.replace(COMBINED_RE, (match, paraNum, h, hm, hs, mm, ss) => {
     if (paraNum !== undefined) {
       return `<button class="ref-para" data-para="${paraNum}">[para ${paraNum}]</button>`;
     }
-    const sec = parseInt(mm, 10) * 60 + parseInt(ss, 10);
-    return `<button class="ref-ts" data-time="${sec}">[${mm}:${ss}]</button>`;
+    const sec = h !== undefined
+      ? parseInt(h, 10) * 3600 + parseInt(hm, 10) * 60 + parseInt(hs, 10)
+      : parseInt(mm, 10) * 60 + parseInt(ss, 10);
+    return `<button class="ref-ts" data-time="${sec}">[${match.slice(1, -1)}]</button>`;
   });
 }
 
@@ -23,7 +43,7 @@ ABSOLUTE RULES:
 1. Use ONLY information stated in the provided excerpts. Zero outside knowledge.
 2. If the excerpts do not clearly contain the answer, reply with exactly: I don't know
 3. Every factual claim MUST include an inline reference:
-   - Video/audio: [MM:SS]  e.g. [02:34]
+   - Video/audio: copy the reference exactly as shown — [MM:SS] e.g. [02:34], or [H:MM:SS] for longer videos e.g. [1:15:23]
    - Documents:   [para N] e.g. [para 3]
 4. Do NOT invent, infer, extrapolate, or guess.
 5. Keep your answer to 2–5 sentences.
@@ -40,9 +60,7 @@ function formatDocs(docs) {
         return `[para ${doc.metadata?.paragraph || 0}] ${doc.page_content}`;
       }
       const ts = doc.metadata?.start || 0;
-      const mm = String(Math.floor(ts / 60)).padStart(2, "0");
-      const ss = String(ts % 60).padStart(2, "0");
-      return `[${mm}:${ss}] ${doc.page_content}`;
+      return `[${formatTimestamp(ts)}] ${doc.page_content}`;
     })
     .join("\n\n");
 }
@@ -335,9 +353,7 @@ export default function AskQuestion({
 
       const context = docs.map(doc => {
         const ts = doc.metadata?.start || 0;
-        const mm = String(Math.floor(ts / 60)).padStart(2, "0");
-        const ss = String(ts % 60).padStart(2, "0");
-        return `[${mm}:${ss}] ${doc.page_content}`;
+        return `[${formatTimestamp(ts)}] ${doc.page_content}`;
       }).join("\n\n");
 
       setStatus("Generating summary…");
@@ -360,9 +376,7 @@ export default function AskQuestion({
         const ts = doc.metadata?.start || 0;
         if ([...seen].some(s => Math.abs(s - ts) < 45)) continue;
         seen.add(ts);
-        const mm = String(Math.floor(ts / 60)).padStart(2, "0");
-        const ss = String(ts % 60).padStart(2, "0");
-        timestamps.push({ seconds: ts, display: `${mm}:${ss}`, label: doc.page_content.slice(0, 60).trim() });
+        timestamps.push({ seconds: ts, display: formatTimestamp(ts), label: doc.page_content.slice(0, 60).trim() });
         if (timestamps.length >= 6) break;
       }
 

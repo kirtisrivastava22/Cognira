@@ -295,6 +295,15 @@ def _conv_to_dict(r: dict) -> dict:
     updated = r.get("updated_at")
     r["created_at"] = created.isoformat() if isinstance(created, datetime) else created
     r["updated_at"] = updated.isoformat() if isinstance(updated, datetime) else updated
+
+    # Conversation documents never stored their own source_type — only
+    # media_id. Without this, the frontend (VideoAnalysis.jsx) defaults
+    # every resumed conversation to "youtube" and tries to embed media_id
+    # as an 11-char YouTube video ID, even when it's actually a docx/upload
+    # hash. Resolve the real source_type from the media record instead.
+    media = get_media(r["media_id"]) if r.get("media_id") else None
+    r["source_type"] = media.get("source_type") if media else r.get("source_type", "youtube")
+
     return r
 
 

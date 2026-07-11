@@ -2,11 +2,26 @@ import os
 from langchain_community.vectorstores import FAISS
 from langchain_huggingface import HuggingFaceEmbeddings
 
-embeddings = HuggingFaceEmbeddings(
-    model_name="sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2"
-)
-
 VECTORSTORE_CACHE = {}
+_embeddings = None
+
+
+def _get_embeddings():
+    """Lazy-load the embedding model on first real use, not at import time.
+
+    Previously this ran at module import (i.e. the moment main.py imports
+    vectorstore, which happens at uvicorn startup) — meaning ~400-600MB of
+    RAM was loaded into memory before the app had served a single request,
+    regardless of whether that request even needed embeddings. On Render's
+    512MB free tier that alone was enough to OOM during boot.
+    """
+    global _embeddings
+    if _embeddings is None:
+        _embeddings = HuggingFaceEmbeddings(
+            model_name="sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2"
+        )
+    return _embeddings
+
 
 def get_or_create_vectorstore(media_id, docs_builder=None):
     print(f"[get_or_create_vectorstore] video_id={media_id}")
@@ -19,7 +34,7 @@ def get_or_create_vectorstore(media_id, docs_builder=None):
     
     # 2. Disk cache
     if os.path.exists(path):
-        db = FAISS.load_local(path, embeddings, allow_dangerous_deserialization=True)
+        db = FAISS.load_local(path, _get_embeddings(), allow_dangerous_deserialization=True)
         VECTORSTORE_CACHE[media_id] = db
         return db
     
@@ -33,7 +48,7 @@ def get_or_create_vectorstore(media_id, docs_builder=None):
         # No transcript available → return None
         return None
     
-    db = FAISS.from_documents(docs, embeddings)
+    db = FAISS.from_documents(docs, _get_embeddings())
     os.makedirs("vectorstores", exist_ok=True)
     db.save_local(path)
     VECTORSTORE_CACHE[media_id] = db
