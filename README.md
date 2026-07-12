@@ -135,53 +135,53 @@ Dashboard opens at: `http://localhost:3000`
 
 ---
 
-##  Performance Metrics
+## Performance Metrics
 
-| Metric | Value |
-|--------|-------|
-| **Average Query Time** | 2-3 seconds |
-| **Streaming Latency** | <500ms first token |
-| **Transcript Processing** | ~1s per 10min video |
-| **Vector Search** | <100ms for retrieval |
-| **Quiz Generation** | 5-8 seconds for 5 questions |
-| **PDF Export** | <2 seconds |
-
+| Metric                        | Value                       |
+| ----------------------------- | --------------------------- |
+| **Average Query Time**        | 2–3 seconds                 |
+| **Streaming Latency**         | <500ms first token          |
+| **Transcript Processing**     | ~1s per 10min video         |
+| **Vector Search**             | <100ms for retrieval        |
+| **Quiz Generation**           | 5–8 seconds (5 questions)   |
+| **PDF Export**                | <2 seconds                  |
+| **Total Questions**           | 44                          |
+| **Keyword Hit Rate**          | 0.932                       |
+| **Confidence Match Rate**     | 0.841                       |
+| **Avg Relevance Score**       | 0.605                       |
+| **Corrective Retry Count**    | 4                           |
+| **Avg Retrieval Latency**     | 237.4 ms                    |
 ## Using Different LLMs
 
 ### Cognira is LLM-agnostic — swap providers easily.
 
 ### Groq (Default — Fastest)
+```bash
 from langchain_groq import ChatGroq
 
 llm = ChatGroq(
     model="llama-3.1-8b-instant",
     temperature=0
 )
+```
 ### OpenAI
+```bash
 from langchain_openai import ChatOpenAI
 
 llm = ChatOpenAI(
     model="gpt-4o-mini",
     temperature=0
 )
+```
 ### Local (Ollama)
+```bash
 from langchain_community.chat_models import ChatOllama
 
 llm = ChatOllama(
     model="llama3",
     temperature=0
 )
-Evaluation Metrics
-Results
-{
-  "total_questions": 44,
-  "keyword_hit_rate": 0.932,
-  "confidence_match_rate": 0.841,
-  "avg_relevance_score": 0.605,
-  "corrective_retry_count": 4,
-  "avg_retrieval_latency_ms": 237.4
-}
-
+```
 ##  Use Cases
 
 ### **1. Students**
@@ -235,7 +235,7 @@ cognira/
 │   │   │   ├── Chapters.jsx
 │   │   │   ├── Quiz.jsx
 │   │   │   ├── History.jsx
-│   │   │   └── Settings.jsx
+│   │   │   └── SharedConversations.jsx
 │   │   ├── App.jsx
 │   │   └── index.jsx
 │   ├── package.json
@@ -312,8 +312,6 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for details.
 - [Groq](https://groq.com) for fast LLM inference
 - [FAISS](https://github.com/facebookresearch/faiss) for vector search
 - [FastAPI](https://fastapi.tiangolo.com) for backend framework
-
- Final Thought
 
 Cognira isn’t just a chatbot — it’s a thinking layer over content.
 
