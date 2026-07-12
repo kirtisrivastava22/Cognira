@@ -184,12 +184,12 @@ export default function AskQuestion({
         })
         .catch(() => {});
     }
-  }, [convId]); 
+  }, [convId,initialMessages,localConvId]); 
   useEffect(() => {
     if (initialMessages && initialMessages.length > 0 && convId === localConvId) {
       setChat(initialMessages);
     }
-  }, [initialMessages]); 
+  }, [initialMessages,convId,localConvId]); 
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });

@@ -288,7 +288,7 @@ export default function VideoAnalysis({ currentVideo, setCurrentVideo, addToHist
         }
       })
       .catch(() => {});
-  }, [convId]); 
+  }, [convId,setCurrentVideo]); 
 
   useEffect(() => { 
     if (!currentVideo) return;
