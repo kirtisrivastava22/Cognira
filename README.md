@@ -1,4 +1,4 @@
-# 🧠 Cognira — Turn any content into clarity.
+# 🦉 Cognira — Turn any content into clarity.
 
 Paste a YouTube URL, upload audio or video, or drop a Word document. Cognira builds transcript intelligence and gives you instant answers, chapters, quizzes, and exportable notes.
 
@@ -7,131 +7,67 @@ Cognira isn’t just a chatbot — it’s a thinking layer over content.
 
 ---
 
-## 🌟 Overview
+## Overview
 
 Cognira is a full-stack conversational AI system designed to deliver **fast, context-aware, and persistent chat experiences**.
 
 Unlike basic chat apps, Cognira focuses on:
-- ⚡ **Low-latency interactions**
-- 🧠 **Context preservation across conversations**
-- 🗂️ **Structured conversation management**
-- 🔗 **Shareable AI conversations**
+-  **Low-latency interactions**
+-  **Context preservation across conversations**
+-  **Structured conversation management**
+-  **Shareable AI conversations**
 
----
+## Features
 
-## ✨ Core Features
+- Context-aware Q&A over transcripts
+- Timestamp-grounded answers
+- CRAG (Corrective Retrieval Augmented Generation)
+- Hallucination rejection ("I don't know" fallback)
+- LLM-agnostic architecture (Groq, OpenAI, Ollama)
+- Fast retrieval (<250ms latency)
 
-### 💬 **Advanced Chat System**
-- Context-aware AI responses
-- Multi-turn conversation memory
-- Clean ChatGPT-like interface
-- Streaming-ready architecture
 
----
+##  Key Features
 
-### 🗂️ **Smart Conversation Management**
-- Persistent chat history
-- Grouping: **Today / Yesterday / Older**
-- Rename conversations inline
-- Delete with **optimistic UI updates**
-- Instant sidebar updates (no reloads)
-
----
-
-### ⚡ **High-Performance Sidebar**
-- Memoized rendering (`useMemo`)
-- Component-level optimization (`React.memo`)
-- Smooth UX with zero lag
-- Dynamic dropdown menus (rename/delete/share)
-
----
-
-### 🔗 **Conversation Sharing**
-- Generate public share links
-- View conversations without login
-- Read-only shared interface
-
----
-
-### 🎯 **UX Engineering Highlights**
-- Click-outside dropdown handling
-- Event propagation control
-- Optimized state synchronization
-- Zero flicker UI transitions
-
-## 🌟 Key Features
-
-### 🤖 **Intelligent Q&A System**
+###  **Intelligent Q&A System**
 - **RAG-powered**: Uses vector embeddings and semantic search
 - **Streaming responses**: Real-time token-by-token answers
 - **Inline citations**: Clickable timestamps for source verification
 - **Context-aware**: Retrieves only relevant transcript segments
 
-### 📑 **Smart Chapter Detection**
+###  **Smart Chapter Detection**
 - Automatic video segmentation using transcript analysis
 - One-click navigation to video sections
 - Time-stamped chapter markers
 
-### ✅ **AI-Generated Quizzes**
+###  **AI-Generated Quizzes**
 - Dynamic question generation (3-10 questions)
 - Multiple-choice format with explanations
 - Instant grading and performance feedback
 
-### 📄 **PDF Export**
+###  **PDF Export**
 - Comprehensive notes with Q&A history
 - Formatted summaries and key takeaways
 - Shareable study materials
 
-### 🔌 **Multi-Platform**
+###  **Multi-Platform**
 - **Web Dashboard**: Full-featured React application
 - **REST API**: Programmatic access for developers
 
 ---
 
-## 🏗️ Architecture
+##  Architecture
+User Query
+↓
+Retriever (BM25 / Vector)
+↓
+CRAG (Relevance Check + Correction)
+↓
+LLM (Answer Generation)
+↓
+Structured Output (Answer + Timestamps + Scores)
 
-```
-┌─────────────────┐
-│   Frontend      │
-│  (React SPA)    │
-└────────┬────────┘
-         │
-         │ HTTP/SSE
-         │
-┌────────▼────────┐      ┌──────────────┐
-│   Backend       │──────▶│  Groq API    │
-│   (FastAPI)     │      │  (LLM)       │
-└────────┬────────┘      └──────────────┘
-         │
-         │
-    ┌────▼────────────────────┐
-    │   RAG Pipeline          │
-    │                         │
-    │  ┌──────────────────┐  │
-    │  │ YouTube API      │  │
-    │  │ (Transcripts)    │  │
-    │  └────────┬─────────┘  │
-    │           │             │
-    │  ┌────────▼─────────┐  │
-    │  │ Text Splitter    │  │
-    │  │ (Chunking)       │  │
-    │  └────────┬─────────┘  │
-    │           │             │
-    │  ┌────────▼─────────┐  │
-    │  │ FAISS Vector DB  │  │
-    │  │ (Embeddings)     │  │
-    │  └────────┬─────────┘  │
-    │           │             │
-    │  ┌────────▼─────────┐  │
-    │  │ MMR Retrieval    │  │
-    │  │ + Reranking      │  │
-    │  └──────────────────┘  │
-    └─────────────────────────┘
-```
-
----
-
-## 🛠️ Tech Stack
+##  Tech Stack
 
 ### **Backend**
 - **FastAPI** - High-performance async API framework
@@ -147,7 +83,7 @@ Unlike basic chat apps, Cognira focuses on:
 - **Streaming API** - Server-Sent Events for real-time responses
 - **LocalStorage** - Client-side data persistence
 
-## 🚀 Quick Start
+##  Quick Start
 
 ### **Prerequisites**
 ```bash
@@ -199,77 +135,54 @@ Dashboard opens at: `http://localhost:3000`
 
 ---
 
-## 📊 Performance Metrics
+## Performance Metrics
 
-| Metric | Value |
-|--------|-------|
-| **Average Query Time** | 2-3 seconds |
-| **Streaming Latency** | <500ms first token |
-| **Transcript Processing** | ~1s per 10min video |
-| **Vector Search** | <100ms for retrieval |
-| **Quiz Generation** | 5-8 seconds for 5 questions |
-| **PDF Export** | <2 seconds |
+| Metric                        | Value                       |
+| ----------------------------- | --------------------------- |
+| **Average Query Time**        | 2–3 seconds                 |
+| **Streaming Latency**         | <500ms first token          |
+| **Transcript Processing**     | ~1s per 10min video         |
+| **Vector Search**             | <100ms for retrieval        |
+| **Quiz Generation**           | 5–8 seconds (5 questions)   |
+| **PDF Export**                | <2 seconds                  |
+| **Total Questions**           | 44                          |
+| **Keyword Hit Rate**          | 0.932                       |
+| **Confidence Match Rate**     | 0.841                       |
+| **Avg Relevance Score**       | 0.605                       |
+| **Corrective Retry Count**    | 4                           |
+| **Avg Retrieval Latency**     | 237.4 ms                    |
+## Using Different LLMs
 
----
+### Cognira is LLM-agnostic — swap providers easily.
 
-## 🎓 RAG Pipeline Details
+### Groq (Default — Fastest)
+```bash
+from langchain_groq import ChatGroq
 
-### **1. Document Loading**
-```python
-# Fetch YouTube transcript
-transcript = YouTubeTranscriptApi.get_transcript(video_id)
-docs = [Document(page_content=chunk["text"], 
-                metadata={"start": chunk["start"]}) 
-        for chunk in transcript]
-```
-
-### **2. Text Chunking**
-```python
-splitter = RecursiveCharacterTextSplitter(
-    chunk_size=600,      # Optimal for context
-    chunk_overlap=120    # Maintain continuity
-)
-chunks = splitter.split_documents(docs)
-```
-
-### **3. Vector Embedding & Storage**
-```python
-# Using FAISS for fast similarity search
-vectorstore = FAISS.from_documents(
-    chunks,
-    embedding=HuggingFaceEmbeddings()
+llm = ChatGroq(
+    model="llama-3.1-8b-instant",
+    temperature=0
 )
 ```
+### OpenAI
+```bash
+from langchain_openai import ChatOpenAI
 
-### **4. Retrieval with MMR**
-```python
-retriever = vectorstore.as_retriever(
-    search_type="mmr",           # Maximal Marginal Relevance
-    search_kwargs={
-        "k": 18,                 # Top results
-        "fetch_k": 60,           # Candidate pool
-        "lambda_mult": 0.4       # Diversity vs relevance
-    }
+llm = ChatOpenAI(
+    model="gpt-4o-mini",
+    temperature=0
 )
 ```
+### Local (Ollama)
+```bash
+from langchain_community.chat_models import ChatOllama
 
-### **5. Timestamp Reranking**
-```python
-# Boost contextually dense regions
-def rerank_by_timestamp_density(docs):
-    scored = []
-    for doc in docs:
-        ts = doc.metadata["start"]
-        # Count nearby documents
-        density = sum(1 for d in docs 
-                     if abs(d.metadata["start"] - ts) <= 40)
-        scored.append((density, doc))
-    return [doc for _, doc in sorted(scored, reverse=True)]
+llm = ChatOllama(
+    model="llama3",
+    temperature=0
+)
 ```
-
----
-
-## 🎯 Use Cases
+##  Use Cases
 
 ### **1. Students**
 - Study video lectures efficiently
@@ -297,7 +210,7 @@ def rerank_by_timestamp_density(docs):
 
 ---
 
-## 📁 Project Structure
+##  Project Structure
 
 ```
 cognira/
@@ -322,7 +235,7 @@ cognira/
 │   │   │   ├── Chapters.jsx
 │   │   │   ├── Quiz.jsx
 │   │   │   ├── History.jsx
-│   │   │   └── Settings.jsx
+│   │   │   └── SharedConversations.jsx
 │   │   ├── App.jsx
 │   │   └── index.jsx
 │   ├── package.json
@@ -346,7 +259,7 @@ cognira/
 
 ---
 
-## 🧪 Testing
+##  Testing
 
 ```bash
 # Run backend tests
@@ -363,32 +276,17 @@ http://127.0.0.1:8000/docs
 
 ---
 
-## 🚢 Deployment
+##  Security & Privacy
 
-### **Backend (Railway/Render/AWS)**
-```bash
-# Using Docker
-docker build -t youtube-rag-backend .
-docker run -p 8000:8000 youtube-rag-backend
-```
-
-### **Frontend (Vercel/Netlify)**
-```bash
-npm run build
-# Deploy the build/ folder
-```
-
-## 🔒 Security & Privacy
-
-- ✅ No user data stored on servers
-- ✅ Transcripts cached locally only
-- ✅ API keys secured with environment variables
-- ✅ CORS configured for specific origins
-- ✅ Rate limiting on all endpoints
+-  No user data stored on servers
+-  Transcripts cached locally only
+-  API keys secured with environment variables
+-  CORS configured for specific origins
+-  Rate limiting on all endpoints
 
 ---
 
-## 🤝 Contributing
+##  Contributing
 
 Contributions are welcome! Please follow these steps:
 
@@ -402,20 +300,18 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for details.
 
 ---
 
-## 📈 Future Roadmap
+## Future Roadmap
 
 - [ ] **Multiple input format** for docx
 - [ ] **Voice input** for questions
 - [ ] **Playlist analysis** for course series
 
-## 🙏 Acknowledgments
+## Acknowledgments
 
 - [LangChain](https://langchain.com) for RAG framework
 - [Groq](https://groq.com) for fast LLM inference
 - [FAISS](https://github.com/facebookresearch/faiss) for vector search
 - [FastAPI](https://fastapi.tiangolo.com) for backend framework
-
- ⭐ Final Thought
 
 Cognira isn’t just a chatbot — it’s a thinking layer over content.
 
