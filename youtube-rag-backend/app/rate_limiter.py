@@ -1,18 +1,3 @@
-"""
-Lightweight in-process rate limiter using a sliding-window counter.
-
-Suitable for single-process deployments (one Uvicorn worker).
-For multi-worker / multi-instance, swap the store with Redis.
-
-Limits (configurable via env vars or defaults):
-  ASK_STREAM  : 30 req / 60 s  per IP
-  INGEST      : 10 req / 60 s  per IP
-  EXPORT      : 5  req / 60 s  per IP
-  QUIZ        :  10 req / 60 s  per IP
-  CHAPTERS    : 10 req / 60 s  per IP
-  GLOBAL      : 100 req / 60 s per IP  (catch-all)
-"""
-
 from __future__ import annotations
 
 import os
@@ -23,13 +8,7 @@ from typing import Optional
 
 from fastapi import HTTPException, Request
 
-
-# ─────────────────────────────────────────────────────────────────────────────
-# Sliding-window store
-# ─────────────────────────────────────────────────────────────────────────────
-
 class SlidingWindow:
-    """Thread-safe sliding-window counter per key."""
 
     def __init__(self, max_requests: int, window_seconds: int):
         self.max_requests = max_requests
@@ -38,10 +17,6 @@ class SlidingWindow:
         self._lock = Lock()
 
     def is_allowed(self, key: str) -> tuple[bool, int]:
-        """
-        Returns (allowed, retry_after_seconds).
-        retry_after is 0 when allowed.
-        """
         now = time.time()
         cutoff = now - self.window_seconds
 
@@ -62,11 +37,6 @@ class SlidingWindow:
     def reset(self, key: str):
         with self._lock:
             self._store.pop(key, None)
-
-
-# ─────────────────────────────────────────────────────────────────────────────
-# Named limiters
-# ─────────────────────────────────────────────────────────────────────────────
 
 def _env_int(name: str, default: int) -> int:
     try:
@@ -102,16 +72,9 @@ LIMITERS: dict[str, SlidingWindow] = {
     ),
 }
 
-
-# ─────────────────────────────────────────────────────────────────────────────
 # IP extraction
-# ─────────────────────────────────────────────────────────────────────────────
 
 def _get_ip(request: Request) -> str:
-    """
-    Prefer X-Forwarded-For (set by reverse proxies like Nginx/Caddy).
-    Falls back to direct client host.
-    """
     forwarded_for = request.headers.get("X-Forwarded-For")
     if forwarded_for:
         return forwarded_for.split(",")[0].strip()
@@ -120,17 +83,7 @@ def _get_ip(request: Request) -> str:
     return "unknown"
 
 
-# ─────────────────────────────────────────────────────────────────────────────
-# FastAPI dependency factory
-# ─────────────────────────────────────────────────────────────────────────────
-
 def rate_limit(limiter_name: str):
-    """
-    Returns a FastAPI dependency that enforces the named limiter.
-
-    Usage:
-        @app.post("/ask_stream", dependencies=[Depends(rate_limit("ask_stream"))])
-    """
     limiter = LIMITERS.get(limiter_name, LIMITERS["global"])
 
     async def _check(request: Request):

@@ -1,0 +1,442 @@
+﻿[
+  {
+    "media_id": "41XDn81nR5c",
+    "question": "What does the content say about: An LLM processes retrieved documents one by one?",
+    "expect_keywords": [
+      "processes",
+      "documents"
+    ],
+    "expect_confident": true,
+    "_source_fact": "An LLM processes retrieved documents one by one"
+  },
+  {
+    "media_id": "41XDn81nR5c",
+    "question": "What does the content say about: A system can retrieve multiple documents, such as d1 and d2?",
+    "expect_keywords": [
+      "documents",
+      "multiple"
+    ],
+    "expect_confident": true,
+    "_source_fact": "A system can retrieve multiple documents, such as d1 and d2"
+  },
+  {
+    "media_id": "41XDn81nR5c",
+    "question": "What does the content say about: A failed node is also referred to as an ambiguous node?",
+    "expect_keywords": [
+      "ambiguous",
+      "referred"
+    ],
+    "expect_confident": true,
+    "_source_fact": "A failed node is also referred to as an ambiguous node"
+  },
+  {
+    "media_id": "qcALGDn0zpk",
+    "question": "What does the content say about: The World Wide Web uses the Hypertext Transfer Protocol (HTTP) as its ?",
+    "expect_keywords": [
+      "application",
+      "Hypertext"
+    ],
+    "expect_confident": true,
+    "_source_fact": "The World Wide Web uses the Hypertext Transfer Protocol (HTTP) as its application layer protocol"
+  },
+  {
+    "media_id": "qcALGDn0zpk",
+    "question": "What does the content say about: The Internet initially had limited usage among researchers, academics,?",
+    "expect_keywords": [
+      "researchers",
+      "popularity"
+    ],
+    "expect_confident": true,
+    "_source_fact": "The Internet initially had limited usage among researchers, academics, and university students before gaining popularity with the World Wide Web"
+  },
+  {
+    "media_id": "qcALGDn0zpk",
+    "question": "What does the content say about: A website is a collection of web pages?",
+    "expect_keywords": [
+      "collection",
+      "website"
+    ],
+    "expect_confident": true,
+    "_source_fact": "A website is a collection of web pages"
+  },
+  {
+    "media_id": "qcALGDn0zpk",
+    "question": "What does the content say about: HTTP or HyperText Transfer Protocol is the application layer protocol?",
+    "expect_keywords": [
+      "application",
+      "HyperText"
+    ],
+    "expect_confident": true,
+    "_source_fact": "HTTP or HyperText Transfer Protocol is the application layer protocol"
+  },
+  {
+    "media_id": "qcALGDn0zpk",
+    "question": "What does the content say about: A client and server exchange data in the form of HTTP messages?",
+    "expect_keywords": [
+      "messages",
+      "exchange"
+    ],
+    "expect_confident": true,
+    "_source_fact": "A client and server exchange data in the form of HTTP messages"
+  },
+  {
+    "media_id": "qcALGDn0zpk",
+    "question": "What does the content say about: HTTP uses TCP as its underlying transport protocol?",
+    "expect_keywords": [
+      "underlying",
+      "transport"
+    ],
+    "expect_confident": true,
+    "_source_fact": "HTTP uses TCP as its underlying transport protocol"
+  },
+  {
+    "media_id": "qcALGDn0zpk",
+    "question": "What does the content say about: TCP is a connection-oriented protocol?",
+    "expect_keywords": [
+      "connection",
+      "oriented"
+    ],
+    "expect_confident": true,
+    "_source_fact": "TCP is a connection-oriented protocol"
+  },
+  {
+    "media_id": "qcALGDn0zpk",
+    "question": "What does the content say about: A URL can be absolute or relative?",
+    "expect_keywords": [
+      "absolute",
+      "relative"
+    ],
+    "expect_confident": true,
+    "_source_fact": "A URL can be absolute or relative"
+  },
+  {
+    "media_id": "qcALGDn0zpk",
+    "question": "What does the content say about: Absolute URLs contain protocol, domain, and path?",
+    "expect_keywords": [
+      "protocol",
+      "Absolute"
+    ],
+    "expect_confident": true,
+    "_source_fact": "Absolute URLs contain protocol, domain, and path"
+  },
+  {
+    "media_id": "qcALGDn0zpk",
+    "question": "What does the content say about: Relative URLs contain only a path?",
+    "expect_keywords": [
+      "Relative",
+      "contain"
+    ],
+    "expect_confident": true,
+    "_source_fact": "Relative URLs contain only a path"
+  },
+  {
+    "media_id": "qcALGDn0zpk",
+    "question": "What does the content say about: The PUT method is used to upload an object to a specific directory on ?",
+    "expect_keywords": [
+      "directory",
+      "specific"
+    ],
+    "expect_confident": true,
+    "_source_fact": "The PUT method is used to upload an object to a specific directory on a server"
+  },
+  {
+    "media_id": "qcALGDn0zpk",
+    "question": "What does the content say about: The DELETE method is used to delete objects from the server?",
+    "expect_keywords": [
+      "objects",
+      "DELETE"
+    ],
+    "expect_confident": true,
+    "_source_fact": "The DELETE method is used to delete objects from the server"
+  },
+  {
+    "media_id": "qcALGDn0zpk",
+    "question": "What does the content say about: The Connection: close header tells the web server that it can close th?",
+    "expect_keywords": [
+      "Connection",
+      "connection"
+    ],
+    "expect_confident": true,
+    "_source_fact": "The Connection: close header tells the web server that it can close the TCP connection"
+  },
+  {
+    "media_id": "qcALGDn0zpk",
+    "question": "What does the content say about: The HTTP response message has six header lines?",
+    "expect_keywords": [
+      "response",
+      "message"
+    ],
+    "expect_confident": true,
+    "_source_fact": "The HTTP response message has six header lines"
+  },
+  {
+    "media_id": "qcALGDn0zpk",
+    "question": "What does the content say about: The Connection: close header line indicates the web server will close ?",
+    "expect_keywords": [
+      "Connection",
+      "connection"
+    ],
+    "expect_confident": true,
+    "_source_fact": "The Connection: close header line indicates the web server will close the TCP connection after sending the response message"
+  },
+  {
+    "media_id": "qcALGDn0zpk",
+    "question": "What does the content say about: The Server: header line indicates the web server generating the respon?",
+    "expect_keywords": [
+      "generating",
+      "indicates"
+    ],
+    "expect_confident": true,
+    "_source_fact": "The Server: header line indicates the web server generating the response message"
+  },
+  {
+    "media_id": "GhX8sNyFo5w",
+    "question": "What does the content say about: APIs and SDKs are used to build features in modern apps?",
+    "expect_keywords": [
+      "features",
+      "modern"
+    ],
+    "expect_confident": true,
+    "_source_fact": "APIs and SDKs are used to build features in modern apps"
+  },
+  {
+    "media_id": "GhX8sNyFo5w",
+    "question": "What does the content say about: Modern apps process payments, send notifications, and display maps?",
+    "expect_keywords": [
+      "notifications",
+      "payments"
+    ],
+    "expect_confident": true,
+    "_source_fact": "Modern apps process payments, send notifications, and display maps"
+  },
+  {
+    "media_id": "GhX8sNyFo5w",
+    "question": "What does the content say about: HTTP requests include GET, POST, PUT, and DELETE operations?",
+    "expect_keywords": [
+      "operations",
+      "requests"
+    ],
+    "expect_confident": true,
+    "_source_fact": "HTTP requests include GET, POST, PUT, and DELETE operations"
+  },
+  {
+    "media_id": "GhX8sNyFo5w",
+    "question": "What does the content say about: GET fetches data from a service?",
+    "expect_keywords": [
+      "fetches",
+      "service"
+    ],
+    "expect_confident": true,
+    "_source_fact": "GET fetches data from a service"
+  },
+  {
+    "media_id": "GhX8sNyFo5w",
+    "question": "What does the content say about: POST creates new resources?",
+    "expect_keywords": [
+      "resources",
+      "creates"
+    ],
+    "expect_confident": true,
+    "_source_fact": "POST creates new resources"
+  },
+  {
+    "media_id": "GhX8sNyFo5w",
+    "question": "What does the content say about: API keys are used to verify who's making requests?",
+    "expect_keywords": [
+      "requests",
+      "making"
+    ],
+    "expect_confident": true,
+    "_source_fact": "API keys are used to verify who's making requests"
+  },
+  {
+    "media_id": "GhX8sNyFo5w",
+    "question": "What does the content say about: API services use tokens to verify requests?",
+    "expect_keywords": [
+      "services",
+      "requests"
+    ],
+    "expect_confident": true,
+    "_source_fact": "API services use tokens to verify requests"
+  },
+  {
+    "media_id": "GhX8sNyFo5w",
+    "question": "What does the content say about: SDKs are pre-built toolboxes that make API connections?",
+    "expect_keywords": [
+      "connections",
+      "toolboxes"
+    ],
+    "expect_confident": true,
+    "_source_fact": "SDKs are pre-built toolboxes that make API connections"
+  },
+  {
+    "media_id": "GhX8sNyFo5w",
+    "question": "What does the content say about: APIs are the raw connection points between services?",
+    "expect_keywords": [
+      "connection",
+      "services"
+    ],
+    "expect_confident": true,
+    "_source_fact": "APIs are the raw connection points between services"
+  },
+  {
+    "media_id": "GhX8sNyFo5w",
+    "question": "What does the content say about: An SDK manages authentication and formats requests?",
+    "expect_keywords": [
+      "authentication",
+      "requests"
+    ],
+    "expect_confident": true,
+    "_source_fact": "An SDK manages authentication and formats requests"
+  },
+  {
+    "media_id": "GhX8sNyFo5w",
+    "question": "What does the content say about: An SDK turns complicated responses into easy-to-use data?",
+    "expect_keywords": [
+      "complicated",
+      "responses"
+    ],
+    "expect_confident": true,
+    "_source_fact": "An SDK turns complicated responses into easy-to-use data"
+  },
+  {
+    "media_id": "GhX8sNyFo5w",
+    "question": "What does the content say about: SDKs come with best practices built in?",
+    "expect_keywords": [
+      "practices",
+      "built"
+    ],
+    "expect_confident": true,
+    "_source_fact": "SDKs come with best practices built in"
+  },
+  {
+    "media_id": "GhX8sNyFo5w",
+    "question": "What does the content say about: SDKs help move products to market quickly?",
+    "expect_keywords": [
+      "products",
+      "quickly"
+    ],
+    "expect_confident": true,
+    "_source_fact": "SDKs help move products to market quickly"
+  },
+  {
+    "media_id": "h7apO7q16V0",
+    "question": "What does the content say about: Graph algorithms include Depth-First Search (DFS) and Breadth-First Se?",
+    "expect_keywords": [
+      "algorithms",
+      "Breadth"
+    ],
+    "expect_confident": true,
+    "_source_fact": "Graph algorithms include Depth-First Search (DFS) and Breadth-First Search (BFS)"
+  },
+  {
+    "media_id": "h7apO7q16V0",
+    "question": "What does the content say about: Algorithms can be split into two distinct classes?",
+    "expect_keywords": [
+      "Algorithms",
+      "distinct"
+    ],
+    "expect_confident": true,
+    "_source_fact": "Algorithms can be split into two distinct classes"
+  },
+  {
+    "media_id": "h7apO7q16V0",
+    "question": "What does the content say about: There is exactly one quadratic function that goes through three given ?",
+    "expect_keywords": [
+      "quadratic",
+      "function"
+    ],
+    "expect_confident": true,
+    "_source_fact": "There is exactly one quadratic function that goes through three given points"
+  },
+  {
+    "media_id": "h7apO7q16V0",
+    "question": "What does the content say about: There is exactly one cubic function that goes through four given point?",
+    "expect_keywords": [
+      "function",
+      "through"
+    ],
+    "expect_confident": true,
+    "_source_fact": "There is exactly one cubic function that goes through four given points"
+  },
+  {
+    "media_id": "h7apO7q16V0",
+    "question": "What does the content say about: Knowing the value of one point implies the value of another point?",
+    "expect_keywords": [
+      "Knowing",
+      "implies"
+    ],
+    "expect_confident": true,
+    "_source_fact": "Knowing the value of one point implies the value of another point"
+  },
+  {
+    "media_id": "h7apO7q16V0",
+    "question": "What does the content say about: If x = -1, then the value of the corresponding point is immediately kn?",
+    "expect_keywords": [
+      "corresponding",
+      "immediately"
+    ],
+    "expect_confident": true,
+    "_source_fact": "If x = -1, then the value of the corresponding point is immediately known"
+  },
+  {
+    "media_id": "h7apO7q16V0",
+    "question": "What does the content say about: If x = 2, then the value of the corresponding point is immediately kno?",
+    "expect_keywords": [
+      "corresponding",
+      "immediately"
+    ],
+    "expect_confident": true,
+    "_source_fact": "If x = 2, then the value of the corresponding point is immediately known"
+  },
+  {
+    "media_id": "h7apO7q16V0",
+    "question": "What does the content say about: A degree 3 polynomial requires at least 4 points to be defined?",
+    "expect_keywords": [
+      "polynomial",
+      "requires"
+    ],
+    "expect_confident": true,
+    "_source_fact": "A degree 3 polynomial requires at least 4 points to be defined"
+  },
+  {
+    "media_id": "h7apO7q16V0",
+    "question": "What does the content say about: Omega is defined as e to the power i over n?",
+    "expect_keywords": [
+      "defined",
+      "power"
+    ],
+    "expect_confident": true,
+    "_source_fact": "Omega is defined as e to the power i over n"
+  },
+  {
+    "media_id": "h7apO7q16V0",
+    "question": "What does the content say about: A polynomial can be represented as a degree n minus one polynomial whe?",
+    "expect_keywords": [
+      "represented",
+      "polynomial"
+    ],
+    "expect_confident": true,
+    "_source_fact": "A polynomial can be represented as a degree n minus one polynomial where n is defined"
+  },
+  {
+    "media_id": "h7apO7q16V0",
+    "question": "What does the content say about: The Discrete Fourier Transform (DFT) is a matrix in most textbooks?",
+    "expect_keywords": [
+      "Transform",
+      "textbooks"
+    ],
+    "expect_confident": true,
+    "_source_fact": "The Discrete Fourier Transform (DFT) is a matrix in most textbooks"
+  },
+  {
+    "media_id": "h7apO7q16V0",
+    "question": "What does the content say about: The FFT is an algorithm for calculating DFT matrix-vector products eff?",
+    "expect_keywords": [
+      "calculating",
+      "efficiently"
+    ],
+    "expect_confident": true,
+    "_source_fact": "The FFT is an algorithm for calculating DFT matrix-vector products efficiently"
+  }
+]

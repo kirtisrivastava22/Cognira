@@ -1,6 +1,4 @@
 import { useEffect, useRef } from "react";
-
-// ── Palette ───────────────────────────────────────────────────
 const C = {
   teal:      [27,  187, 158],
   tealBright:[45,  212, 191],
@@ -16,7 +14,7 @@ const rgba  = ([r, g, b], a) => `rgba(${r},${g},${b},${a})`;
 const lerp  = (a, b, t) => a + (b - a) * t;
 const rand  = (a, b) => Math.random() * (b - a) + a;
 
-// ── Scene builders ────────────────────────────────────────────
+
 function makeBlobs(W, H) {
   return [
     // primary teal hero — big, bright

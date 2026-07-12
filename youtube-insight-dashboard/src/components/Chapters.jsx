@@ -2,7 +2,6 @@ import React, { useState } from "react";
 
 const API = process.env.REACT_APP_API_URL || "/api";
 
-// ── Groq system prompt for chapter detection ──────────────────────────────
 const CHAPTER_SYSTEM = `You are analyzing a transcript or document to detect logical chapter boundaries.
 Return ONLY valid JSON array — no markdown, no extra text.
 Each chapter object:
@@ -26,7 +25,6 @@ ${sections}
 Return ONLY a JSON array like: [{"title":"...","summary":"...","key_topics":["...","..."]}]`;
 }
 
-// ── Bucket transcript docs into time windows (video/audio) ────────────────
 function bucketDocsByTime(docs, windowSec = 240, maxChapters = 7) {
   if (!docs.length) return [];
   const sorted = [...docs].sort((a, b) => (a.metadata?.start || 0) - (b.metadata?.start || 0));
@@ -62,7 +60,6 @@ function bucketDocsByTime(docs, windowSec = 240, maxChapters = 7) {
   return buckets;
 }
 
-// ── Bucket docx docs into paragraph windows (no real time axis) ───────────
 function bucketDocsByParagraph(docs, parasPerChapter = 6, maxChapters = 7) {
   if (!docs.length) return [];
   const sorted = [...docs].sort((a, b) => (a.metadata?.paragraph ?? 0) - (b.metadata?.paragraph ?? 0));
@@ -102,11 +99,6 @@ function hasTopicShift(text) {
   return TOPIC_SHIFT.some(s => text.toLowerCase().includes(s));
 }
 
-// Dispatches to the right bucketing strategy based on the media's source type.
-// docx docs never carry a real "start" — metadata.start on them is a synthetic
-// paragraph_index * 10 value (see docx_reader.py), which bucketDocsByTime would
-// happily format as MM:SS, producing exactly the wrong "timestamp" chapters
-// you'd see for a document. Route docx through paragraph-based bucketing instead.
 function bucketDocs(docs, sourceType, windowSec = 240, maxChapters = 7) {
   if (sourceType === "docx") {
     return bucketDocsByParagraph(docs, 6, maxChapters);
@@ -114,7 +106,6 @@ function bucketDocs(docs, sourceType, windowSec = 240, maxChapters = 7) {
   return bucketDocsByTime(docs, windowSec, maxChapters);
 }
 
-// ── Call Groq from browser ────────────────────────────────────────────────
 async function detectChaptersWithGroq(docs, sourceType, groqKey) {
   const buckets = bucketDocs(docs, sourceType);
   if (!buckets.length) throw new Error("No transcript content to analyze.");
@@ -146,7 +137,7 @@ async function detectChaptersWithGroq(docs, sourceType, groqKey) {
   const data    = await res.json();
   const content = data.choices?.[0]?.message?.content || "[]";
 
-  // Strip markdown fences if present
+  
   const clean = content.replace(/```(?:json)?/g, "").trim();
   const start = clean.indexOf("[");
   const end   = clean.lastIndexOf("]");
@@ -154,10 +145,6 @@ async function detectChaptersWithGroq(docs, sourceType, groqKey) {
 
   const llmChapters = JSON.parse(clean.slice(start, end + 1));
 
-  // Re-attach the deterministic start_time/timestamp from our own bucketing
-  // instead of trusting whatever the LLM returned — the LLM only supplies
-  // title/summary/key_topics now, so a bucket and chapter always line up
-  // by index and a docx doc always gets "Para N", never a fabricated MM:SS.
   return llmChapters.map((ch, i) => ({
     title:      ch.title || `Part ${i + 1}`,
     start_time: buckets[i]?.start_time ?? 0,
@@ -167,7 +154,6 @@ async function detectChaptersWithGroq(docs, sourceType, groqKey) {
   }));
 }
 
-// ── Component ─────────────────────────────────────────────────────────────
 export default function Chapters({ videoData, groqKey, onNeedKey }) {
   const videoId    = videoData?.videoId    || "";
   const sourceType = videoData?.sourceType || "youtube";
@@ -183,7 +169,7 @@ export default function Chapters({ videoData, groqKey, onNeedKey }) {
 
     setLoading(true); setError("");
     try {
-      // Step 1: Get transcript docs from backend (vectorstore)
+      
       const res = await fetch(`${API}/retrieve`, {
         method:  "POST",
         headers: { "Content-Type": "application/json" },
@@ -193,7 +179,6 @@ export default function Chapters({ videoData, groqKey, onNeedKey }) {
       const { docs } = await res.json();
       if (!docs?.length) throw new Error("No transcript content available for this video.");
 
-      // Step 2: Detect chapters in browser via Groq
       const chapters = await detectChaptersWithGroq(docs, sourceType, key);
       if (!chapters.length) throw new Error("No chapters detected.");
 

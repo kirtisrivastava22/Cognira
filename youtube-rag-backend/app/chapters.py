@@ -1,14 +1,3 @@
-"""
-Detects logical chapters from any transcript (YouTube, audio upload, etc.)
-
-Design goals:
-  - Source-agnostic: operates on any list of LangChain Documents
-  - Semantic bucketing: splits on natural topic-shift signals, not just clock time
-  - Richer output: each chapter carries summary + key topics (ready for UI cards)
-  - Resilient: LLM failure on a single bucket never kills the whole result
-  - Extensible: ChapterResult dataclass easy to add new fields later
-"""
-
 from __future__ import annotations
 
 import re
@@ -23,12 +12,7 @@ from langchain_core.documents import Document
 from app.rag import load_youtube_docs
 import os
 
-# ─────────────────────────────────────────────────────────────────────────────
-# LLM (fast, cheap — chapter titles don't need 70b)
-# ─────────────────────────────────────────────────────────────────────────────
-
 def _get_llm():
-    """Lazy LLM loader — only called when chapters are actually requested."""
     api_key = os.getenv("GROQ_API_KEY", "")
     if not api_key:
         return None
@@ -39,19 +23,14 @@ def _get_llm():
     )
 
 
-
-# ─────────────────────────────────────────────────────────────────────────────
-# Types
-# ─────────────────────────────────────────────────────────────────────────────
-
 @dataclass
 class Chapter:
     title:       str
-    start_time:  int            # seconds for video/audio, paragraph index for docx
-    timestamp:   str            # "mm:ss" / "h:mm:ss" for video, "Para N" for docx
-    ref_type:    str = "video"  # "video" | "docx" — tells the frontend how to use start_time
-    summary:     str = ""       # 1-sentence summary of what happens in this chapter
-    key_topics:  list[str] = field(default_factory=list)   # 2-3 keywords for UI tags
+    start_time:  int          
+    timestamp:   str            
+    ref_type:    str = "video" 
+    summary:     str = ""       
+    key_topics:  list[str] = field(default_factory=list)   
 
 @dataclass
 class ChapterResult:
@@ -63,13 +42,9 @@ class ChapterResult:
         return asdict(self)
 
 
-# ─────────────────────────────────────────────────────────────────────────────
 # Helpers
-# ─────────────────────────────────────────────────────────────────────────────
 
 def _fmt(seconds: int) -> str:
-    """MM:SS under an hour, H:MM:SS beyond — keeps chapter timestamps
-    consistent with the citation format used elsewhere (see rag.format_timestamp)."""
     seconds = max(0, int(seconds))
     h, rem = divmod(seconds, 3600)
     m, s = divmod(rem, 60)
@@ -79,21 +54,14 @@ def _fmt(seconds: int) -> str:
 
 
 def _is_docx_docs(docs: list[Document]) -> bool:
-    """docx docs carry metadata['source'] == 'docx' and metadata['paragraph'],
-    never metadata['start'] — that's what makes time-based bucketing collapse
-    everything into one 00:00 chapter, so we branch to paragraph bucketing instead."""
     return bool(docs) and docs[0].metadata.get("source") == "docx"
 
 
 def _clean_json(raw: str) -> str:
     return re.sub(r"```(?:json)?", "", raw).strip()
 
-
-# ─────────────────────────────────────────────────────────────────────────────
 # Bucketing: semantic-aware windowing
-# ─────────────────────────────────────────────────────────────────────────────
 
-# Topic-shift signals: words that typically open a new section
 _TOPIC_SHIFT_WORDS = {
     "now let", "next", "moving on", "let's talk", "let's discuss",
     "another", "second", "third", "finally", "in contrast", "on the other hand",
@@ -112,15 +80,6 @@ def bucket_transcript(
     max_chapters: int = 7,
     min_words:   int = 40,
 ) -> list[dict]:
-    """
-    Splits transcript into chapter buckets using a hybrid strategy:
-      1. Primary split: time window (default 4 minutes)
-      2. Early split: if a topic-shift signal appears AND the current window
-         is already >60 seconds old — triggers a chapter boundary sooner.
-      3. Merge: drop buckets with fewer than `min_words` words into the previous one.
-
-    Works on ANY Documents list with metadata['start'] (seconds).
-    """
     if not docs:
         return []
 
@@ -174,16 +133,6 @@ def bucket_paragraphs(
     max_chapters:    int = 7,
     min_words:       int = 40,
 ) -> list[dict]:
-    """
-    Paragraph-count analogue of bucket_transcript, for docx docs which have
-    no time axis. Splits every `paragraphs_per_chapter` paragraphs (or
-    sooner on a topic-shift signal), same merge-short-buckets cleanup.
-
-    Each bucket's "start_time" holds the FIRST paragraph number in that
-    chapter (int) and "timestamp" holds a human label "Para N" — mirrors
-    bucket_transcript's start_time (seconds) / timestamp (mm:ss) shape so
-    detect_chapters_from_docs can stay source-agnostic downstream.
-    """
     if not docs:
         return []
 
@@ -232,7 +181,6 @@ def bucket_paragraphs(
 
 
 def _merge_short_buckets(buckets: list[dict], min_words: int) -> list[dict]:
-    """Merge any bucket with too few words into the previous one."""
     merged = []
     for b in buckets:
         word_count = len(b["text"].split())
@@ -242,10 +190,6 @@ def _merge_short_buckets(buckets: list[dict], min_words: int) -> list[dict]:
             merged.append(b)
     return merged
 
-
-# ─────────────────────────────────────────────────────────────────────────────
-# LLM prompt: richer output (title + summary + key_topics)
-# ─────────────────────────────────────────────────────────────────────────────
 
 _CHAPTER_PROMPT = PromptTemplate.from_template(
 """You are analysing a section of a video/audio transcript.
@@ -274,10 +218,7 @@ JSON:"""
 
 
 def _llm_title_for_bucket(bucket: dict, idx: int, ref_type: str = "video") -> Chapter:
-    """
-    Call the LLM to generate title + summary + key_topics for one bucket.
-    Falls back to safe defaults if anything fails.
-    """
+   
     try:
         llm = _get_llm()
         if llm is None:
@@ -325,17 +266,7 @@ def detect_chapters_from_docs(
     window_sec:   int = 240,
     max_chapters: int = 7,
 ) -> ChapterResult:
-    """
-    Source-agnostic chapter detector.
-    Works on any list of LangChain Documents with optional metadata['start'].
-
-    Parameters
-    ----------
-    docs         : transcript documents (YouTube, Whisper, uploaded audio, etc.)
-    media_id     : identifier for logging / response payload
-    window_sec   : minimum seconds per chapter before a time-based split
-    max_chapters : hard cap on number of chapters
-    """
+    
     result = ChapterResult(media_id=media_id)
 
     if not docs:
@@ -345,8 +276,6 @@ def detect_chapters_from_docs(
     is_docx = _is_docx_docs(docs)
 
     if is_docx:
-        # docx docs have no metadata['start'] — bucket_transcript would silently
-        # collapse them into a single 00:00 chapter, so use paragraph counts instead.
         buckets = bucket_paragraphs(docs, max_chapters=max_chapters)
     else:
         buckets = bucket_transcript(docs, window_sec=window_sec, max_chapters=max_chapters)
@@ -362,10 +291,6 @@ def detect_chapters_from_docs(
 
 
 def detect_chapters(video_id: str) -> dict:
-    """
-    YouTube-specific convenience wrapper.
-    Called by the FastAPI route.
-    """
     docs   = load_youtube_docs(video_id)
     result = detect_chapters_from_docs(docs, media_id=video_id)
     return result.to_dict()

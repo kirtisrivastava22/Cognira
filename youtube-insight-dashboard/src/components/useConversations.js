@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
-import { apiFetch } from "../App";   // re-use the JWT-aware fetch wrapper
+import { apiFetch } from "../App";   
 
 export function useConversations(user) {
   const [list,         setList]         = useState([]);
@@ -7,7 +7,7 @@ export function useConversations(user) {
 
   const userId = user?.user_id ?? null;
 
-  // ── Fetch all conversations for this user ────────────────────────────────
+
   const fetchList = useCallback(async () => {
     if (!userId) { setList([]); return; }
     try {
@@ -22,7 +22,7 @@ export function useConversations(user) {
     fetchList();
   }, [fetchList]);
 
-  // ── Reset when user signs out ────────────────────────────────────────────
+  
   useEffect(() => {
     if (!userId) {
       setList([]);

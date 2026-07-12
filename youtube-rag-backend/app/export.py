@@ -1,9 +1,3 @@
-"""
-Generates a professionally designed DOCX study-notes document.
-LLM content is generated on the frontend (browser → Groq directly).
-This endpoint only receives the finished payload and produces the .docx file.
-"""
-
 from __future__ import annotations
 
 import logging
@@ -27,10 +21,6 @@ from docx.shared import Pt
 from docx.enum.text import WD_ALIGN_PARAGRAPH
 
 
-# ──────────────────────────────────────────────────────────────────────────
-# Request model — payload sent from browser after LLM generation
-# ──────────────────────────────────────────────────────────────────────────
-
 class ExportSection(BaseModel):
     heading: str
     bullets: list[str]
@@ -45,10 +35,6 @@ class ExportPayload(BaseModel):
     key_takeaways: list[str] = []
     timestamps:    list[dict] = []
 
-
-# ──────────────────────────────────────────────────────────────────────────
-# DOCX builder
-# ──────────────────────────────────────────────────────────────────────────
 
 def generate_docx_from_payload(payload: dict, output_path: str):
     doc = Document()
@@ -94,10 +80,6 @@ def generate_docx_from_payload(payload: dict, output_path: str):
     doc.save(output_path)
 
 
-# ──────────────────────────────────────────────────────────────────────────
-# Metadata helper (for title fallback when browser doesn't send it)
-# ──────────────────────────────────────────────────────────────────────────
-
 def _get_video_title(video_id: str) -> dict:
     try:
         res = requests.get(
@@ -115,16 +97,10 @@ def _get_video_title(video_id: str) -> dict:
         return {"title": video_id, "channel": ""}
 
 
-# ──────────────────────────────────────────────────────────────────────────
 # Export endpoint — accepts full payload from browser
-# ──────────────────────────────────────────────────────────────────────────
 
 @router.post("/export/docx", dependencies=[Depends(rate_limit("export"))])
 def export_docx(payload: ExportPayload):
-    """
-    Receive a finished notes payload from the browser and generate a DOCX.
-    No LLM calls happen here — the browser already ran those via Groq.
-    """
     export_dir = Path("exports")
     export_dir.mkdir(exist_ok=True)
     out_path = export_dir / f"{payload.video_id}_notes.docx"

@@ -7,14 +7,6 @@ _embeddings = None
 
 
 def _get_embeddings():
-    """Lazy-load the embedding model on first real use, not at import time.
-
-    Previously this ran at module import (i.e. the moment main.py imports
-    vectorstore, which happens at uvicorn startup) — meaning ~400-600MB of
-    RAM was loaded into memory before the app had served a single request,
-    regardless of whether that request even needed embeddings. On Render's
-    512MB free tier that alone was enough to OOM during boot.
-    """
     global _embeddings
     if _embeddings is None:
         _embeddings = HuggingFaceEmbeddings(
@@ -45,7 +37,6 @@ def get_or_create_vectorstore(media_id, docs_builder=None):
     docs = docs_builder(media_id)
     
     if not docs:
-        # No transcript available → return None
         return None
     
     db = FAISS.from_documents(docs, _get_embeddings())

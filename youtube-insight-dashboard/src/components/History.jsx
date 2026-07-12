@@ -1,7 +1,6 @@
 import React, { useState, useMemo, useRef, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 
-// ── Date grouping ─────────────────────────────────────────────────────────
 const groupByDate = (videos) => {
   const groups = { today: [], yesterday: [], thisWeek: [], older: [] };
   const now       = new Date();
@@ -39,7 +38,6 @@ function formatRelativeTime(dateStr) {
   return date.toLocaleDateString(undefined, { month: "short", day: "numeric" });
 }
 
-// ── Animated counter ──────────────────────────────────────────────────────
 function Counter({ to, duration = 600 }) {
   const [val, setVal] = useState(0);
   useEffect(() => {
@@ -56,7 +54,6 @@ function Counter({ to, duration = 600 }) {
   return <>{val}</>;
 }
 
-// ── Video card ────────────────────────────────────────────────────────────
 function VideoCard({ video, onClick, index }) {
   const src   = video.source_type || "youtube";
   const meta  = SOURCE_META[src] || SOURCE_META.youtube;
@@ -102,7 +99,6 @@ function VideoCard({ video, onClick, index }) {
   );
 }
 
-// ── List row (for list view) ──────────────────────────────────────────────
 function VideoRow({ video, onClick, index }) {
   const src  = video.source_type || "youtube";
   const meta = SOURCE_META[src] || SOURCE_META.youtube;
@@ -148,7 +144,6 @@ function VideoRow({ video, onClick, index }) {
   );
 }
 
-// ── Stats bar ─────────────────────────────────────────────────────────────
 function StatsBar({ videos }) {
   const counts = useMemo(() => {
     const c = { youtube: 0, upload: 0, docx: 0 };
@@ -177,15 +172,13 @@ function StatsBar({ videos }) {
   );
 }
 
-// ── Main component ────────────────────────────────────────────────────────
 export default function History({ videoHistory, setCurrentVideo, user }) {
   const navigate          = useNavigate();
   const [search,   setSearch]   = useState("");
-  const [view,     setView]     = useState("grid"); // "grid" | "list"
-  const [sortBy,   setSortBy]   = useState("date"); // "date" | "title" | "type"
+  const [view,     setView]     = useState("grid");
+  const [sortBy,   setSortBy]   = useState("date");
   const searchRef = useRef(null);
 
-  // Focus search on "/" key
   useEffect(() => {
     const handler = (e) => {
       if (e.key === "/" && document.activeElement?.tagName !== "INPUT") {
@@ -226,7 +219,6 @@ export default function History({ videoHistory, setCurrentVideo, user }) {
     }
   };
 
-  // ── Styles injected once ───────────────────────────────────────────────
   useEffect(() => {
     if (document.getElementById("history-styles")) return;
     const style = document.createElement("style");
@@ -497,7 +489,6 @@ export default function History({ videoHistory, setCurrentVideo, user }) {
   return (
     <div className="page-grid">
 
-      {/* ── Header ─────────────────────────────────────────────────────── */}
       <div className="card card-accent">
         <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 16, flexWrap: "wrap" }}>
           <div>
@@ -518,10 +509,9 @@ export default function History({ videoHistory, setCurrentVideo, user }) {
         </div>
       </div>
 
-      {/* ── Stats ──────────────────────────────────────────────────────── */}
+      
       {videoHistory.length > 0 && <StatsBar videos={videoHistory} />}
 
-      {/* ── Empty state ────────────────────────────────────────────────── */}
       {videoHistory.length === 0 ? (
         <div className="card">
           <div className="empty-state">
@@ -535,7 +525,7 @@ export default function History({ videoHistory, setCurrentVideo, user }) {
         </div>
       ) : (
         <>
-          {/* ── Toolbar ──────────────────────────────────────────────── */}
+         
           <div className="card card-sm">
             <div className="history-toolbar">
               {/* Search */}
@@ -570,7 +560,6 @@ export default function History({ videoHistory, setCurrentVideo, user }) {
                 <button className={`history-view-btn${view === "list" ? " active" : ""}`} onClick={() => setView("list")} title="List view">☰</button>
               </div>
 
-              {/* Result count */}
               {search && (
                 <span className="caption" style={{ color: "var(--text-tertiary)", whiteSpace: "nowrap" }}>
                   {sorted.length} result{sorted.length !== 1 ? "s" : ""}
@@ -579,7 +568,7 @@ export default function History({ videoHistory, setCurrentVideo, user }) {
             </div>
           </div>
 
-          {/* ── No results ─────────────────────────────────────────────── */}
+          
           {sorted.length === 0 ? (
             <div className="card">
               <div className="empty-state">
@@ -589,7 +578,7 @@ export default function History({ videoHistory, setCurrentVideo, user }) {
               </div>
             </div>
           ) : (
-            /* ── Groups ──────────────────────────────────────────────── */
+            
             Object.entries(grouped).map(([key, videos]) =>
               videos.length === 0 ? null : (
                 <div key={key} className="card">

@@ -1,14 +1,3 @@
-"""
-Generates multiple-choice quizzes from video transcripts.
-
-Design goals:
-  - Accuracy-first: facts extracted separately from question generation
-  - Difficulty support: easy / medium / hard (ready for adaptive UI)
-  - Source-agnostic: works on any list of LangChain Documents, not just YouTube
-  - Extensible: QuizResult dataclass makes it easy to add new fields later
-  - Resilient: every LLM call is wrapped; partial results are returned gracefully
-"""
-
 from __future__ import annotations
 
 import json
@@ -24,9 +13,6 @@ from langchain_core.documents import Document
 from app.rag import load_youtube_docs
 import os
 
-# ─────────────────────────────────────────────────────────────────────────────
-# LLM  (70b for quality; isolated here so it's easy to swap)
-# ─────────────────────────────────────────────────────────────────────────────
 def _make_llm(temperature: float = 0.2, max_tokens: int = 1500):
     api_key = os.getenv("GROQ_API_KEY", "")
     if not api_key:
@@ -39,22 +25,17 @@ def _make_llm(temperature: float = 0.2, max_tokens: int = 1500):
     )
 
 
-
-# ─────────────────────────────────────────────────────────────────────────────
-# Types / dataclasses
-# ─────────────────────────────────────────────────────────────────────────────
-
 Difficulty = Literal["easy", "medium", "hard"]
 
 @dataclass
 class QuizQuestion:
     question:    str
     options:     list[str]
-    correct:     int           # index into options[]
+    correct:     int           
     explanation: str
     difficulty:  Difficulty = "medium"
-    source_fact: str = ""      # the transcript fact it was generated from
-    timestamp:   str = ""      # [mm:ss] of source chunk, if available
+    source_fact: str = ""     
+    timestamp:   str = ""      
 
 @dataclass
 class QuizResult:
@@ -65,10 +46,6 @@ class QuizResult:
     def to_dict(self) -> dict:
         return asdict(self)
 
-
-# ─────────────────────────────────────────────────────────────────────────────
-# Content filters
-# ─────────────────────────────────────────────────────────────────────────────
 
 _BAD_KEYWORDS = {
     "host", "speaker", "playlist", "channel", "subscribe", "like", "comment",
@@ -84,22 +61,12 @@ def _is_valid_fact(fact: str) -> bool:
     )
 
 def _clean_json(raw: str) -> str:
-    """Strip markdown fences and leading/trailing noise from LLM output."""
     raw = re.sub(r"```(?:json)?", "", raw).strip()
     return raw
 
 
-# ─────────────────────────────────────────────────────────────────────────────
-# Step 1 — sample transcript into topic windows
-# ─────────────────────────────────────────────────────────────────────────────
-
 def _sample_windows(docs: list[Document], num_windows: int = 6) -> list[dict]:
-    """
-    Split the full doc list into evenly-spaced windows.
-    Each window = {text, start_time}.
-    Works on any list of Documents with metadata['start'] (seconds).
-    Falls back gracefully if metadata is absent.
-    """
+    
     if not docs:
         return []
 
@@ -124,9 +91,6 @@ def _sample_windows(docs: list[Document], num_windows: int = 6) -> list[dict]:
     return windows
 
 
-# ─────────────────────────────────────────────────────────────────────────────
-# Step 2 — extract factual statements per window
-# ─────────────────────────────────────────────────────────────────────────────
 
 _FACT_PROMPT = PromptTemplate.from_template(
 """You are extracting quiz facts from a technical transcript segment.
@@ -154,7 +118,6 @@ JSON:"""
 )
 
 def _extract_facts(windows: list[dict]) -> list[dict]:
-    """Returns list of {fact, timestamp} dicts."""
     results = []
 
     for window in windows:
@@ -183,10 +146,6 @@ def _extract_facts(windows: list[dict]) -> list[dict]:
 
     return results
 
-
-# ─────────────────────────────────────────────────────────────────────────────
-# Step 3 — generate one MCQ from a fact
-# ─────────────────────────────────────────────────────────────────────────────
 
 _DIFFICULTY_GUIDANCE = {
     "easy":   "Use straightforward language. The correct answer should be obvious to someone who watched the video.",
@@ -274,27 +233,13 @@ def _generate_question(
         return None
 
 
-# ─────────────────────────────────────────────────────────────────────────────
-# Public API
-# ─────────────────────────────────────────────────────────────────────────────
-
 def generate_quiz_from_docs(
     docs:          list[Document],
     media_id:      str,
     num_questions: int = 5,
     difficulty:    Difficulty = "medium",
 ) -> QuizResult:
-    """
-    Source-agnostic quiz generator.
-    Works on ANY list of LangChain Documents with optional metadata['start'].
-
-    Parameters
-    ----------
-    docs          : transcript documents (any source — YouTube, audio, upload)
-    media_id      : identifier used for logging and the result payload
-    num_questions : how many questions to return
-    difficulty    : "easy" | "medium" | "hard"
-    """
+    
     result = QuizResult(video_id=media_id)
 
     if not docs:
@@ -312,7 +257,7 @@ def generate_quiz_from_docs(
 
     print(f"[quiz] Extracted {len(fact_objects)} facts for {media_id}")
 
-    # 3. Generate questions  (try up to 2× target to cover failures)
+    # 3. Generate questions  
     questions: list[QuizQuestion] = []
     for fo in fact_objects[: num_questions * 2]:
         q = _generate_question(fo["fact"], fo["timestamp"], difficulty)
@@ -334,10 +279,6 @@ def generate_quiz(
     num_questions: int = 5,
     difficulty:    Difficulty = "medium",
 ) -> dict:
-    """
-    YouTube-specific convenience wrapper.
-    Called by the FastAPI route.
-    """
     docs   = load_youtube_docs(video_id)
     result = generate_quiz_from_docs(docs, video_id, num_questions, difficulty)
     return result.to_dict()

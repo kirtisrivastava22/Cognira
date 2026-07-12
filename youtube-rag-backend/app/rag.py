@@ -24,16 +24,10 @@ from rank_bm25 import BM25Okapi
 import numpy as np
 import re
 
-
-# =========================
-# LLM
-# =========================
-
-# Replace load_llm and the global llm with this:
 def load_llm():
     api_key = os.getenv("GROQ_API_KEY", "")
     if not api_key:
-        return None  # ← don't crash, just return None
+        return None 
     from langchain_groq import ChatGroq
     return ChatGroq(
         model="llama-3.1-8b-instant",
@@ -43,9 +37,6 @@ def load_llm():
     )
 
 llm = load_llm() 
-# =========================
-# TRANSCRIPT LOADER
-# =========================
 
 def load_youtube_docs(video_id: str):
 
@@ -91,19 +82,9 @@ def load_youtube_docs(video_id: str):
     return docs
 
 
-# =========================
 # SPLITTER
-# =========================
 
 def split_documents(docs):
-    """
-    Sentence-aware chunking: prefer splitting on sentence boundaries.
-
-    FIX: preserve ALL metadata fields from the source doc (not just "start").
-    This is critical for docx docs which carry source="docx", paragraph=N, page=N.
-    Without this, all metadata is lost after splitting and format_docs_with_references
-    can't distinguish docx chunks from video chunks.
-    """
     splitter = RecursiveCharacterTextSplitter(
         chunk_size=500,
         chunk_overlap=80,
@@ -117,26 +98,17 @@ def split_documents(docs):
             text = text.strip()
             if len(text) < 20:
                 continue
-            # Copy ALL metadata from the parent doc, not just "start"
             chunks.append(
                 Document(
                     page_content=text,
                     metadata=dict(doc.metadata)   # full copy
                 )
             )
+        return chunks
 
-    return chunks
-
-
-# =========================
 # HYBRID BM25 + VECTOR RETRIEVAL
-# =========================
 
 def hybrid_retrieve(db, question: str, k: int = 14):
-    """
-    Combine FAISS MMR results with BM25 keyword results.
-    Deduplicates and returns merged top-k documents.
-    """
     # Semantic retrieval
     vector_docs = db.as_retriever(
         search_type="mmr",
@@ -166,10 +138,45 @@ def hybrid_retrieve(db, question: str, k: int = 14):
 
     return merged[:k + 4]
 
+#CRAG RETRIEVAL + RELEVANCE GATE
 
-# =========================
+_STOPWORDS = {
+    "what", "how", "does", "do", "is", "are", "the", "a", "an", "in", "on",
+    "of", "to", "for", "and", "or", "this", "that", "was", "were", "did",
+    "can", "could", "would", "should", "explain", "tell", "me", "about",
+}
+
+
+def _rewrite_query(question: str) -> str:
+    words = [w for w in re.findall(r"[a-zA-Z0-9']+", question.lower()) if w not in _STOPWORDS]
+    return " ".join(words) or question
+
+
+def _estimate_relevance(docs, question) -> float:
+    if not docs:
+        return 0.0
+    keywords = {w for w in re.findall(r"[a-zA-Z0-9']+", question.lower()) if w not in _STOPWORDS}
+    if not keywords:
+        return 1.0  
+    context = " ".join(d.page_content.lower() for d in docs[:6])
+    hits = sum(1 for kw in keywords if kw in context)
+    return hits / len(keywords)
+
+
+def crag_retrieve(db, question: str, k: int = 14, confidence_floor: float = 0.5):
+    docs = hybrid_retrieve(db, question, k=k)
+    relevance = _estimate_relevance(docs, question)
+
+    corrected = False
+    if relevance < confidence_floor and docs:
+        wide_docs = hybrid_retrieve(db, _rewrite_query(question), k=k + 8)
+        wide_relevance = _estimate_relevance(wide_docs, question)
+        if wide_relevance > relevance:
+            docs, relevance, corrected = wide_docs, wide_relevance, True
+
+    return docs, {"relevance_score": round(relevance, 3), "corrected": corrected}
+
 # TIMESTAMP-DENSITY RERANKING
-# =========================
 
 def rerank_docs_by_timestamp_density(docs):
     if not docs:
@@ -188,20 +195,9 @@ def rerank_docs_by_timestamp_density(docs):
     return [docs[i] for _, i in scored]
 
 
-# =========================
 # FORMAT DOCS FOR PROMPT
-# =========================
 
 def format_timestamp(seconds: int) -> str:
-    """
-    Format seconds as MM:SS for videos under an hour, H:MM:SS beyond that.
-
-    Minutes/seconds are always zero-padded to 2 digits so downstream
-    regexes (TIMESTAMP_RE) can rely on a fixed-width [MM:SS] / [H:MM:SS]
-    shape no matter how long the video is. Without the hour rollover,
-    a video past 99 minutes would produce e.g. "[105:23]", which
-    TIMESTAMP_RE below (and the old \\d{2} regex) can't match.
-    """
     seconds = max(0, int(seconds))
     h, rem = divmod(seconds, 3600)
     m, s = divmod(rem, 60)
@@ -209,23 +205,10 @@ def format_timestamp(seconds: int) -> str:
         return f"{h}:{m:02d}:{s:02d}"
     return f"{m:02d}:{s:02d}"
 
-
-# Matches [MM:SS] or [H:MM:SS]. MM/SS are exactly 2 digits when part of the
-# H:MM:SS form; the leading number is 1-4 digits when there's no hour group,
-# because llama-3.1-8b-instant doesn't reliably preserve the "1:56:10"
-# structure when citing from the excerpts — it commonly flattens it back to
-# raw total minutes, e.g. "[116:10]" instead of "[1:56:10]" (116 min = 1h56m,
-# seconds preserved correctly). Both shapes must parse to the same seconds.
 TIMESTAMP_RE = re.compile(r'\[(\d{1,4}):(\d{2})(?::(\d{2}))?\]')
 
 
 def parse_timestamp_match(match) -> int:
-    """
-    Convert a TIMESTAMP_RE match into total seconds.
-    Three groups (a:b:c) -> H:MM:SS.
-    Two groups (a:b)     -> MM:SS, where `a` may itself be >99 if the LLM
-                             flattened the hour component into raw minutes.
-    """
     a, b, c = match.group(1), match.group(2), match.group(3)
     if c is not None:
         return int(a) * 3600 + int(b) * 60 + int(c)
@@ -233,16 +216,6 @@ def parse_timestamp_match(match) -> int:
 
 
 def format_docs_with_references(docs):
-    """
-    Format retrieved docs for the LLM prompt.
-
-    docx docs  → [para N] prefix       (paragraph number from metadata)
-    video docs → [MM:SS] / [H:MM:SS]   (timestamp from metadata, hour-aware
-                                         so citations stay parseable on long videos)
-
-    The LLM is instructed to cite these exact tags inline, which the
-    frontend regex then converts to clickable buttons.
-    """
     formatted = []
 
     for doc in docs:
@@ -250,7 +223,7 @@ def format_docs_with_references(docs):
 
         if source == "docx":
             para = doc.metadata.get("paragraph", 0)
-            # Use [para N] format — matches frontend COMBINED_RE and prompt rules
+            # Using [para N] format — matches frontend COMBINED_RE and prompt rules
             formatted.append(f"[para {para}] {doc.page_content}")
         else:
             ts = doc.metadata.get("start", 0)
@@ -259,9 +232,7 @@ def format_docs_with_references(docs):
     return "\n\n".join(formatted)
 
 
-# =========================
 # STRICT RAG PROMPT
-# =========================
 
 _STRICT_PROMPT = PromptTemplate.from_template(
 """You are a strict transcript analyst. Your ONLY knowledge source is the transcript excerpts below.
@@ -294,21 +265,15 @@ def build_rag_chain(llm, retriever):
     return parallel | _STRICT_PROMPT | llm | StrOutputParser()
 
 
-# =========================
 # HALLUCINATION GUARD
-# =========================
 
 def _looks_like_hallucination(answer: str, docs) -> bool:
-    """
-    If the answer cites timestamps not present in the retrieved docs,
-    flag it as a likely hallucination.
-    """
     if not answer or "i don't know" in answer.lower():
         return False
 
     answer_matches = list(TIMESTAMP_RE.finditer(answer))
     if not answer_matches:
-        return False   # no timestamp citations — cannot judge
+        return False   
 
     doc_seconds = set()
     for doc in docs:
@@ -318,14 +283,12 @@ def _looks_like_hallucination(answer: str, docs) -> bool:
     for match in answer_matches:
         cited_sec = parse_timestamp_match(match)
         if any(abs(cited_sec - ds) <= 15 for ds in doc_seconds):
-            return False   # at least one valid match found
+            return False  
 
-    return True   # all cited timestamps are foreign — suspicious
+    return True  
 
 
-# =========================
 # ASK
-# =========================
 
 def ask_youtube_video(video_id, question):
 
@@ -341,14 +304,12 @@ def ask_youtube_video(video_id, question):
             "video_id": video_id
         }
 
-    # Hybrid retrieval + rerank
-    docs = hybrid_retrieve(db, question, k=14)
+    docs, crag_info = crag_retrieve(db, question, k=14)
     docs = rerank_docs_by_timestamp_density(docs)
-
+    
     if not docs:
         return {"answer": "I don't know", "timestamps": [], "video_id": video_id}
 
-    # Run chain
     retriever = db.as_retriever(
         search_type="mmr",
         search_kwargs={"k": 14, "fetch_k": 60, "lambda_mult": 0.45}
@@ -391,5 +352,7 @@ def ask_youtube_video(video_id, question):
     return {
         "answer": answer,
         "timestamps": timestamps,
-        "video_id": video_id
+        "video_id": video_id,
+         "crag_relevance_score": crag_info["relevance_score"],
+        "crag_corrected": crag_info["corrected"],
     }

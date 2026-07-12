@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useMemo } from "react";
 import { NavLink, useNavigate } from "react-router-dom";
-import { apiFetch } from "../App";   // JWT-aware fetch
+import { apiFetch } from "../App";  
 
 const NAV = [
   { to: "/",        icon: "⬡", label: "Home" },
@@ -8,7 +8,6 @@ const NAV = [
   { to: "/history", icon: "◷", label: "History" },
 ];
 
-// ── Conversation list item ────────────────────────────────────────────────
 const ConvItem = React.memo(function ConvItem({
   conv, isActive, isRenaming, renameValue, renameRef,
   menuOpen, menuRef,
@@ -56,7 +55,6 @@ const ConvItem = React.memo(function ConvItem({
   );
 });
 
-// ── Group conversations ───────────────────────────────────────────────────
 function groupConvsByDate(convs) {
   const now = new Date();
   const todayMs     = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
@@ -75,7 +73,6 @@ function groupConvsByDate(convs) {
   return groups;
 }
 
-// ── Sidebar ───────────────────────────────────────────────────────────────
 export default function Sidebar({
   user,
   onOpenAuth,

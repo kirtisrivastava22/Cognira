@@ -16,7 +16,7 @@ function isValidFact(fact) {
   return fact.trim().length > 20 && !BAD_KEYWORDS.some(k => lower.includes(k));
 }
 
-// ── Sample docs into windows ──────────────────────────────────────────────
+
 function sampleWindows(docs, numWindows = 6) {
   if (!docs.length) return [];
   const sorted = [...docs].sort((a, b) => (a.metadata?.start || 0) - (b.metadata?.start || 0));
@@ -34,7 +34,6 @@ function sampleWindows(docs, numWindows = 6) {
   return windows;
 }
 
-// ── Extract facts from windows ────────────────────────────────────────────
 async function extractFacts(windows, groqKey) {
   const facts = [];
   for (const w of windows) {
@@ -77,7 +76,6 @@ JSON:`
   return facts;
 }
 
-// ── Generate one MCQ from a fact ──────────────────────────────────────────
 async function generateQuestion(fact, timestamp, difficulty, groqKey) {
   const res = await fetch("https://api.groq.com/openai/v1/chat/completions", {
     method: "POST",
@@ -129,7 +127,6 @@ JSON:`
   };
 }
 
-// ── Full quiz generation pipeline ─────────────────────────────────────────
 async function generateQuizInBrowser(docs, numQuestions, difficulty, groqKey) {
   const windows     = sampleWindows(docs, Math.min(8, numQuestions * 2));
   const facts       = await extractFacts(windows, groqKey);
@@ -146,7 +143,6 @@ async function generateQuizInBrowser(docs, numQuestions, difficulty, groqKey) {
   return questions.slice(0, numQuestions);
 }
 
-// ── Component ─────────────────────────────────────────────────────────────
 export default function Quiz({ videoData, groqKey, onNeedKey }) {
   const videoId = videoData?.videoId || "";
 
@@ -165,7 +161,7 @@ export default function Quiz({ videoData, groqKey, onNeedKey }) {
 
     setLoading(true); setError(""); setShowResults(false);
     try {
-      // Step 1: Get docs from backend
+      
       setLoadingStep("Loading transcript…");
       const res = await fetch(`${API}/retrieve`, {
         method:  "POST",
@@ -176,7 +172,7 @@ export default function Quiz({ videoData, groqKey, onNeedKey }) {
       const { docs } = await res.json();
       if (!docs?.length) throw new Error("No transcript content available.");
 
-      // Step 2: Generate quiz in browser
+    
       setLoadingStep("Extracting facts…");
       const questions = await generateQuizInBrowser(docs, numQuestions, difficulty, key);
 
@@ -206,7 +202,7 @@ export default function Quiz({ videoData, groqKey, onNeedKey }) {
   const pct   = quiz ? Math.round((score / quiz.length) * 100) : 0;
   const pass  = pct >= 60;
 
-  // ── Config screen ────────────────────────────────────────────────────────
+
   if (!quiz) {
     return (
       <div>
@@ -248,7 +244,7 @@ export default function Quiz({ videoData, groqKey, onNeedKey }) {
     );
   }
 
-  // ── Results screen ───────────────────────────────────────────────────────
+  
   if (showResults) {
     return (
       <div>
@@ -284,8 +280,6 @@ export default function Quiz({ videoData, groqKey, onNeedKey }) {
       </div>
     );
   }
-
-  // ── Quiz screen ──────────────────────────────────────────────────────────
   const allAnswered = userAnswers.every(a => a !== null);
   return (
     <div>

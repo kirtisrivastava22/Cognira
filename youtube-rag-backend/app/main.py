@@ -38,6 +38,7 @@ from app.rate_limiter import rate_limit
 from app.rag import (
     ask_youtube_video,
     hybrid_retrieve,
+    crag_retrieve,
     rerank_docs_by_timestamp_density,
     split_documents,
     format_docs_with_references,
@@ -55,9 +56,8 @@ from app.transcript_service import load_media_docs
 from app.vectorstore import get_or_create_vectorstore
 from app.docx_reader import load_docx_docs, WordLimitExceeded
 
-# ─────────────────────────────────────────────────────────────────────────────
+
 # Logging
-# ─────────────────────────────────────────────────────────────────────────────
 
 logging.basicConfig(
     level=logging.INFO,
@@ -66,9 +66,9 @@ logging.basicConfig(
 )
 log = logging.getLogger("main")
 
-# ─────────────────────────────────────────────────────────────────────────────
+
 # Config
-# ─────────────────────────────────────────────────────────────────────────────
+
 
 MAX_UPLOAD_BYTES = 50 * 1024 * 1024
 DOCX_MIME_TYPES  = {
@@ -91,9 +91,6 @@ JWT_ALGORITHM   = "HS256"
 JWT_EXPIRE_DAYS = int(os.getenv("JWT_EXPIRE_DAYS", "30"))
 
 
-# ─────────────────────────────────────────────────────────────────────────────
-# Lifespan
-# ─────────────────────────────────────────────────────────────────────────────
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -106,9 +103,9 @@ async def lifespan(app: FastAPI):
     log.info("Shutting down…")
 
 
-# ─────────────────────────────────────────────────────────────────────────────
+
 # App
-# ─────────────────────────────────────────────────────────────────────────────
+
 
 app = FastAPI(title="Cognira API", version="5.0.0", lifespan=lifespan)
 
@@ -150,28 +147,20 @@ app.add_middleware(
 app.include_router(export_router)
 
 
-# ─────────────────────────────────────────────────────────────────────────────
 # Health
-# ─────────────────────────────────────────────────────────────────────────────
 
 @app.get("/health", tags=["ops"])
 def health():
     return {"status": "ok", "version": "5.0.0"}
 
 
-# ─────────────────────────────────────────────────────────────────────────────
-# JWT helpers
-# ─────────────────────────────────────────────────────────────────────────────
-
 def _create_jwt(user_id: str) -> str:
-    """Mint a signed JWT that expires in JWT_EXPIRE_DAYS days."""
     expire  = datetime.now(timezone.utc) + timedelta(days=JWT_EXPIRE_DAYS)
     payload = {"sub": user_id, "exp": expire, "iat": datetime.now(timezone.utc)}
     return jwt.encode(payload, JWT_SECRET, algorithm=JWT_ALGORITHM)
 
 
 def _decode_jwt(token: str) -> Optional[str]:
-    """Return user_id if token is valid and not expired, else None."""
     try:
         payload = jwt.decode(token, JWT_SECRET, algorithms=[JWT_ALGORITHM])
         return payload.get("sub")
@@ -180,7 +169,6 @@ def _decode_jwt(token: str) -> Optional[str]:
 
 
 def _get_session_token(request: Request) -> Optional[str]:
-    """Extract JWT from  Authorization: Bearer <token>  header."""
     auth = request.headers.get("Authorization", "")
     if auth.startswith("Bearer "):
         return auth[7:].strip()
@@ -188,7 +176,6 @@ def _get_session_token(request: Request) -> Optional[str]:
 
 
 def _require_user(request: Request) -> dict:
-    """FastAPI dependency — returns user dict or raises 401."""
     token = _get_session_token(request)
     if not token:
         raise HTTPException(status_code=401, detail="Not authenticated.")
@@ -201,9 +188,8 @@ def _require_user(request: Request) -> dict:
     return user
 
 
-# ─────────────────────────────────────────────────────────────────────────────
+
 # Auth endpoints
-# ─────────────────────────────────────────────────────────────────────────────
 
 class RegisterRequest(BaseModel):
     name:     str
@@ -241,7 +227,6 @@ class LoginRequest(BaseModel):
 
 @app.post("/auth/register", tags=["auth"])
 def auth_register(req: RegisterRequest):
-    """Create a new account. Returns user + a signed JWT."""
     try:
         user = register_user(req.name, req.email, req.password)
     except ValueError as e:
@@ -254,7 +239,6 @@ def auth_register(req: RegisterRequest):
 
 @app.post("/auth/login", tags=["auth"])
 def auth_login(req: LoginRequest):
-    """Verify credentials. Returns user + a signed JWT."""
     try:
         user = authenticate_user(req.email, req.password)
     except ValueError as e:
@@ -267,10 +251,6 @@ def auth_login(req: LoginRequest):
 
 @app.get("/auth/me", tags=["auth"])
 def auth_me(request: Request):
-    """
-    Fast session-restore. Frontend calls this on page load with the stored JWT.
-    Returns user + history if token is valid, else 401.
-    """
     token = _get_session_token(request)
     if not token:
         raise HTTPException(status_code=401, detail="Not authenticated.")
@@ -286,14 +266,9 @@ def auth_me(request: Request):
 
 @app.post("/auth/logout", tags=["auth"])
 def auth_logout(request: Request):
-    """
-    JWTs are stateless — the client simply discards the token.
-    This endpoint exists for API symmetry and future blocklist support.
-    """
     return JSONResponse(content={"ok": True})
 
 
-# Legacy passwordless sign-in kept for backward-compat
 class SignInRequest(BaseModel):
     name:  str
     email: str
@@ -356,9 +331,9 @@ def get_transcript(video_id: str):
         raise HTTPException(status_code=500, detail=str(e))
 
 
-# ─────────────────────────────────────────────────────────────────────────────
+
 # History endpoints
-# ─────────────────────────────────────────────────────────────────────────────
+
 
 class HistoryAddRequest(BaseModel):
     user_id:    str
@@ -378,9 +353,8 @@ def add_history_entry(req: HistoryAddRequest):
     return {"ok": True}
 
 
-# ─────────────────────────────────────────────────────────────────────────────
+
 # Request models
-# ─────────────────────────────────────────────────────────────────────────────
 
 class AskRequest(BaseModel):
     video_id: str
@@ -413,10 +387,6 @@ class IngestResponse(BaseModel):
     word_count:  int | None = None
     truncated:   bool | None = None
 
-
-# ─────────────────────────────────────────────────────────────────────────────
-# Helpers
-# ─────────────────────────────────────────────────────────────────────────────
 
 def _get_streaming_llm() -> ChatGroq:
     return ChatGroq(
@@ -451,9 +421,8 @@ def _is_docx(filename: str, content_type: str | None) -> bool:
     return ext in {".docx", ".doc"} or (content_type or "") in DOCX_MIME_TYPES
 
 
-# ─────────────────────────────────────────────────────────────────────────────
+
 # Streaming prompt
-# ─────────────────────────────────────────────────────────────────────────────
 
 _STREAM_SYSTEM = """You are a strict document/transcript analyst. Your ONLY knowledge source is the excerpts provided.
 
@@ -478,9 +447,7 @@ Question: {question}
 Answer (with inline references), or "I don't know":"""
 
 
-# ─────────────────────────────────────────────────────────────────────────────
 # Ask routes
-# ─────────────────────────────────────────────────────────────────────────────
 
 @app.post("/ask", dependencies=[Depends(rate_limit("ask_stream"))])
 def ask(req: AskRequest):
@@ -504,8 +471,14 @@ async def ask_stream(req: AskRequest):
             yield "data: " + json.dumps({"type": "end"}) + "\n\n"
             return
 
-        docs = hybrid_retrieve(db, req.question, k=14)
+        docs, crag_info = crag_retrieve(db, req.question, k=14)
         docs = rerank_docs_by_timestamp_density(docs)
+
+        yield "data: " + json.dumps({
+            "type": "diagnostics",
+            "relevance_score": crag_info["relevance_score"],
+            "corrected": crag_info["corrected"],
+        }) + "\n\n"
 
         if not docs:
             yield "data: " + json.dumps({"type": "answer", "value": "I don't know."}) + "\n\n"
@@ -551,9 +524,7 @@ async def ask_stream(req: AskRequest):
     )
 
 
-# ─────────────────────────────────────────────────────────────────────────────
 # Conversation endpoints
-# ─────────────────────────────────────────────────────────────────────────────
 
 class ConvCreateRequest(BaseModel):
     user_id:  str
@@ -647,9 +618,7 @@ def conv_shared_view(share_token: str):
     return conv
 
 
-# ─────────────────────────────────────────────────────────────────────────────
 # Ingest
-# ─────────────────────────────────────────────────────────────────────────────
 
 @app.post("/ingest", response_model=IngestResponse, dependencies=[Depends(rate_limit("ingest"))])
 async def ingest_media(
@@ -733,7 +702,7 @@ async def ingest_media(
     )
 
 
-# ── Ingest pre-fetched transcript ─────────────────────────────────────────────
+
 
 class IngestTextRequest(BaseModel):
     video_id:   str
@@ -794,8 +763,6 @@ def ingest_text(req: IngestTextRequest):
     return {"ok": True, "media_id": req.video_id, "chunks": len(chunks), "cached": False}
 
 
-# ── Retrieve relevant docs ────────────────────────────────────────────────────
-
 class RetrieveRequest(BaseModel):
     video_id: str
     question: str
@@ -827,7 +794,7 @@ def retrieve_docs(req: RetrieveRequest):
     if db is None:
         return {"docs": [], "video_id": req.video_id}
 
-    docs = hybrid_retrieve(db, req.question, k=req.k)
+    docs, crag_info = crag_retrieve(db, req.question, k=req.k)
     docs = rerank_docs_by_timestamp_density(docs)
 
     serialized = [
@@ -835,12 +802,13 @@ def retrieve_docs(req: RetrieveRequest):
         for doc in docs
     ]
 
-    return {"docs": serialized, "video_id": req.video_id}
-
-
-# ─────────────────────────────────────────────────────────────────────────────
+    return {
+        "docs": serialized,
+        "video_id": req.video_id,
+        "relevance_score": crag_info["relevance_score"],
+        "crag_corrected": crag_info["corrected"],
+    }
 # Media / Doc
-# ─────────────────────────────────────────────────────────────────────────────
 
 @app.get("/media/{media_id}")
 def get_media_file(media_id: str):
@@ -877,9 +845,7 @@ def get_doc(media_id: str):
     raise HTTPException(status_code=400, detail="Not a document source.")
 
 
-# ─────────────────────────────────────────────────────────────────────────────
 # Chapters
-# ─────────────────────────────────────────────────────────────────────────────
 
 @app.get("/chapters/{video_id}", dependencies=[Depends(rate_limit("chapters"))])
 def get_chapters(video_id: str):
@@ -893,9 +859,7 @@ def get_chapters(video_id: str):
     return detect_chapters(video_id)
 
 
-# ─────────────────────────────────────────────────────────────────────────────
 # Quiz
-# ─────────────────────────────────────────────────────────────────────────────
 
 Difficulty = Literal["easy", "medium", "hard"]
 

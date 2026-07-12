@@ -65,6 +65,26 @@ function formatDocs(docs) {
     .join("\n\n");
 }
 
+function CragBadge({ crag }) {
+  if (!crag || crag.score == null) return null;
+  const pct = Math.round(crag.score * 100);
+  const low = crag.score < 0.5;
+  return (
+    <span
+      title={crag.corrected
+        ? "Initial retrieval had low confidence, so the search was automatically widened."
+        : "Retrieval confidence for this answer."}
+      style={{
+        fontSize: 11, marginLeft: 8, padding: "2px 8px",
+        borderRadius: 999, border: "1px solid var(--border)",
+        color: low ? "#f59e0b" : "var(--text-tertiary)",
+        background: "var(--bg-elevated)",
+      }}
+    >
+      {crag.corrected ? "↻ widened · " : ""}{pct}% relevance
+    </span>
+  );
+}
 // ─────────────────────────────────────────────────────────────────────────────
 // NOTE / EXPORT helpers (unchanged from original)
 // ─────────────────────────────────────────────────────────────────────────────
@@ -99,20 +119,6 @@ function parseBullets(text) {
   return text.split("\n").map(l => l.replace(/^[\s\-*•\d.]+/, "").trim()).filter(l => l.length > 8).slice(0, 8);
 }
 
-/**
- * AskQuestion
- *
- * Props:
- *   videoData        – { videoId, sourceType, title }
- *   user             – { user_id, name } | null
- *   groqKey          – string
- *   onNeedKey        – () => void
- *   convId           – active conv_id from parent (null = no conv yet / new media)
- *   initialMessages  – [{question, answer}] pre-loaded by VideoAnalysis when
- *                      a sidebar conv is selected — avoids a redundant fetch
- *   onConvCreated    – (conv) => void
- *   onConvUpdated    – (conv) => void
- */
 export default function AskQuestion({
   videoData,
   user,
@@ -132,19 +138,17 @@ export default function AskQuestion({
   const [error,         setError]         = useState("");
   const [chat,          setChat]          = useState([]);
   const [currentAnswer, setCurrentAnswer] = useState("");
-  // Internal conv ID — this component owns it once created; parent seeds it via convId
   const [localConvId,   setLocalConvId]   = useState(convId || null);
   const [shareUrl,      setShareUrl]      = useState(null);
   const [shareCopied,   setShareCopied]   = useState(false);
 
   const bottomRef    = useRef(null);
-  // Track the media we last initialized for, so we know when to reset
+  
   const lastVideoRef = useRef(videoId);
-
-  // ── Reset everything when media changes (user loaded a new video/doc) ────
+  const [currentCrag, setCurrentCrag] = useState(null); 
   useEffect(() => {
     if (!videoId) return;
-    if (videoId === lastVideoRef.current) return; // same media, do nothing
+    if (videoId === lastVideoRef.current) return; 
     lastVideoRef.current = videoId;
     setChat([]);
     setLocalConvId(null);
@@ -153,28 +157,22 @@ export default function AskQuestion({
     setCurrentAnswer("");
   }, [videoId]);
 
-  // ── Sync when parent selects a different conversation from the sidebar ───
-  // convId changes  →  load that conv's messages.
-  // initialMessages may already carry them (from VideoAnalysis pre-fetch),
-  // so we only hit the network if they weren't provided.
   useEffect(() => {
     if (!convId) {
-      // Parent cleared the conv (e.g. "New chat" or media change)
       setLocalConvId(null);
       setChat([]);
       setShareUrl(null);
       return;
     }
 
-    if (convId === localConvId) return; // already loaded — nothing to do
+    if (convId === localConvId) return; 
 
     setLocalConvId(convId);
 
     if (initialMessages && initialMessages.length > 0) {
-      // Parent already fetched messages — use them directly
       setChat(initialMessages);
     } else {
-      // Fallback: fetch from API
+    
       fetch(`${API}/conversation/${convId}`)
         .then(r => r.ok ? r.json() : null)
         .then(data => {
@@ -186,25 +184,23 @@ export default function AskQuestion({
         })
         .catch(() => {});
     }
-  }, [convId]); // eslint-disable-line react-hooks/exhaustive-deps
-
-  // ── Also sync initialMessages when they arrive after convId is already set ─
+  }, [convId]); 
   useEffect(() => {
     if (initialMessages && initialMessages.length > 0 && convId === localConvId) {
       setChat(initialMessages);
     }
-  }, [initialMessages]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [initialMessages]); 
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [currentAnswer, chat]);
 
-  // ── Create a conversation scoped to THIS media on first question ──────────
+  
   const ensureConversation = useCallback(async (firstQuestion) => {
     if (localConvId) return localConvId;
 
     if (!user?.user_id) {
-      // Guest — use an ephemeral local ID (not persisted)
+     
       const tempId = `local_${Date.now()}`;
       setLocalConvId(tempId);
       return tempId;
@@ -215,8 +211,8 @@ export default function AskQuestion({
         method: "POST",
         body: JSON.stringify({
           user_id:  user.user_id,
-          media_id: videoId,                               // ← scoped to current media
-          title:    firstQuestion.slice(0, 60),            // ← titled from first question
+          media_id: videoId,                              
+          title:    firstQuestion.slice(0, 60),            
         }),
       });
       if (!res.ok) return null;
@@ -227,7 +223,6 @@ export default function AskQuestion({
     } catch { return null; }
   }, [localConvId, user, videoId, onConvCreated]);
 
-  // ── Persist a single Q&A turn to the backend ─────────────────────────────
   const persistTurn = useCallback(async (cid, turn) => {
     if (!user?.user_id || !cid || cid.startsWith("local_")) return;
     try {
@@ -239,16 +234,15 @@ export default function AskQuestion({
     } catch {}
   }, [user, onConvUpdated]);
 
-  // ── Core ask ──────────────────────────────────────────────────────────────
   const handleAsk = async () => {
     if (!question.trim()) { setError("Enter a question."); return; }
     const key = groqKey || localStorage.getItem("groq_api_key") || "";
     if (!key) { onNeedKey?.(); setError("Add your free Groq API key to enable answers."); return; }
 
     setCurrentAnswer(""); setError(""); setIsLoading(true);
+    setCurrentCrag(null);                         
     setStatus("Retrieving relevant content…");
 
-    // Create conv on first question — pass the question text so we get a good title
     const cid = await ensureConversation(question.trim());
 
     try {
@@ -258,7 +252,8 @@ export default function AskQuestion({
         body: JSON.stringify({ video_id: videoId, question, k: 14 }),
       });
       if (!retrieveRes.ok) throw new Error(`Retrieve failed: HTTP ${retrieveRes.status}`);
-      const { docs } = await retrieveRes.json();
+      const { docs, relevance_score, crag_corrected } = await retrieveRes.json();
+      setCurrentCrag({ score: relevance_score, corrected: crag_corrected });
 
       if (!docs || docs.length === 0) {
         setCurrentAnswer("I don't know — no relevant content found.");
@@ -311,10 +306,14 @@ export default function AskQuestion({
         }
       }
 
-      const turn = { question: askedQ, answer: rawAnswer || "I don't know." };
+      const turn = {
+        question: askedQ,
+        answer:   rawAnswer || "I don't know.",
+        crag:     { score: relevance_score, corrected: crag_corrected },
+      };
       setChat(prev => [...prev, turn]);
       await persistTurn(cid, turn);
-      setCurrentAnswer(""); setQuestion(""); setStatus(""); setIsLoading(false);
+      setCurrentAnswer(""); setCurrentCrag(null); setQuestion(""); setStatus(""); setIsLoading(false);
 
     } catch (e) {
       setError(e.message || "Something went wrong.");
@@ -322,7 +321,6 @@ export default function AskQuestion({
     }
   };
 
-  // ── Reference clicks ──────────────────────────────────────────────────────
   const handleRefClick = (e) => {
     if (e.target.classList.contains("ref-ts")) {
       window.dispatchEvent(new CustomEvent("cognira:seek", {
@@ -336,7 +334,6 @@ export default function AskQuestion({
     }
   };
 
-  // ── Export notes ──────────────────────────────────────────────────────────
   const handleExport = async () => {
     const key = groqKey || localStorage.getItem("groq_api_key") || "";
     if (!key) { onNeedKey?.(); setError("Add your Groq API key to export notes."); return; }
@@ -403,7 +400,7 @@ export default function AskQuestion({
       const disp = exportRes.headers.get("Content-Disposition") || "";
       a.download = disp.includes("filename=") ? disp.split("filename=")[1].replace(/"/g, "") : `${videoId}_notes.docx`;
       document.body.appendChild(a); 
-      a.click(); // simulates a click on the link to trigger the download
+      a.click();
       URL.revokeObjectURL(url); 
       document.body.removeChild(a);
 
@@ -412,7 +409,6 @@ export default function AskQuestion({
     } finally { setStatus(""); }
   };
 
-  // ── Share ─────────────────────────────────────────────────────────────────
   const handleShare = async () => {
     if (!user) { setError("Sign in to share conversations."); return; }
     try {
@@ -455,7 +451,7 @@ export default function AskQuestion({
 
   const handleClearChat = () => {
     setChat([]); setLocalConvId(null); setShareUrl(null);
-    lastVideoRef.current = videoId; // keep video, just clear chat
+    lastVideoRef.current = videoId; 
     onConvCreated?.(null);
   };
 
@@ -470,7 +466,7 @@ export default function AskQuestion({
           display: "flex", alignItems: "center", gap: 10,
         }}>
           <span style={{ fontSize: 13, color: "var(--text-secondary)", flex: 1 }}>
-            🔑 Add your free <strong>Groq API key</strong> to enable AI answers — answers run directly in your browser.
+            Add your free <strong>Groq API key</strong> to enable AI answers — answers run directly in your browser.
           </span>
           <button className="btn btn-ghost btn-sm" onClick={onNeedKey} style={{ flexShrink: 0 }}>Add key</button>
         </div>
@@ -484,7 +480,7 @@ export default function AskQuestion({
           <span className="tag" style={{ background: "var(--bg-elevated)", color: "var(--text-secondary)", fontSize: 11 }}>● Saved</span>
         )}
         {hasKey && (
-          <span className="tag" style={{ background: "rgba(34,197,94,0.1)", color: "rgb(34,197,94)", fontSize: 11 }}>⚡ Browser AI</span>
+          <span className="tag" style={{ background: "rgba(34,197,94,0.1)", color: "rgb(34,197,94)", fontSize: 11 }}> Browser AI</span>
         )}
       </div>
 
@@ -502,16 +498,16 @@ export default function AskQuestion({
         </div>
       )}
 
-      {chat.map((item, idx) => (
+     {chat.map((item, idx) => (
         <div key={idx} className="answer-box">
-          <div className="answer-q">Q: {item.question}</div>
+          <div className="answer-q">Q: {item.question} <CragBadge crag={item.crag} /></div>
           <div className="answer-text" dangerouslySetInnerHTML={{ __html: renderAnswer(item.answer) }} onClick={handleRefClick} />
         </div>
       ))}
 
       {currentAnswer && (
         <div className="answer-box" style={{ borderColor: "var(--accent-border)" }}>
-          <div className="answer-q">Answering…</div>
+          <div className="answer-q">Answering… <CragBadge crag={currentCrag} /></div>
           <div className="answer-text" dangerouslySetInnerHTML={{ __html: renderAnswer(currentAnswer) }} onClick={handleRefClick} />
         </div>
       )}

@@ -31,7 +31,6 @@ async function fetchYouTubeTranscript(videoId) {
   }
 }
 
-/* ── YouTube player ───────────────────────────────────────────── */
 function YouTubePlayer({ videoId }) {
   const iframeRef = useRef(null);
   useEffect(() => {
@@ -62,7 +61,6 @@ function YouTubePlayer({ videoId }) {
   );
 }
 
-/* ── Uploaded media player ────────────────────────────────────── */
 function MediaPlayer({ videoId, title }) {
   const mediaRef = useRef(null);
   const isAudio  = /\.(mp3|wav|m4a)$/i.test(title || "");
@@ -101,7 +99,6 @@ function MediaPlayer({ videoId, title }) {
   );
 }
 
-/* ── DOCX viewer ──────────────────────────────────────────────── */
 function DocxViewer({ mediaId }) {
   const [paragraphs,    setParagraphs]    = useState([]);
   const [loading,       setLoading]       = useState(true);
@@ -238,7 +235,7 @@ function DocxViewer({ mediaId }) {
   );
 }
 
-/* ── Main VideoAnalysis ───────────────────────────────────────── */
+
 export default function VideoAnalysis({ currentVideo, setCurrentVideo, addToHistory, user, onOpenAuth, convId, onConvCreated, onConvUpdated }) {
   const [activeTab,    setActiveTab]    = useState("ask");
   const [inputMode,    setInputMode]    = useState("youtube");
@@ -253,14 +250,13 @@ export default function VideoAnalysis({ currentVideo, setCurrentVideo, addToHist
   const [drag,         setDrag]         = useState(false);
   const [showKeyModal, setShowKeyModal] = useState(false);
   const [groqKey,      setGroqKey]      = useState(localStorage.getItem("groq_api_key") || "");
-  // Conversation state — scoped per media
+  
   const [activeConvId,  setActiveConvId]  = useState(null);
   const [convMessages,  setConvMessages]  = useState([]);
 
   const fileRef = useRef(null);
   const docxRef = useRef(null);
 
-  // ── When sidebar selects a conversation, fetch it and restore media + messages ──
   useEffect(() => {
     if (!convId) return;
     fetch(`${API}/conversation/${convId}`)
@@ -292,11 +288,10 @@ export default function VideoAnalysis({ currentVideo, setCurrentVideo, addToHist
         }
       })
       .catch(() => {});
-  }, [convId]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [convId]); 
 
-  useEffect(() => { // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { 
     if (!currentVideo) return;
-    // Only reset conv state when the media actually changes
     const incomingId = currentVideo.videoId || currentVideo.media_id;
     if (incomingId && incomingId !== videoId) {
       setActiveConvId(null);
@@ -317,7 +312,6 @@ export default function VideoAnalysis({ currentVideo, setCurrentVideo, addToHist
 
   const resetState = () => { setError(""); setWarnMsg(""); setDocxMeta(null); };
 
-  /* YouTube — fetch transcript in browser, send to backend */
   const handleLoadVideo = async () => {
     resetState();
     const id = extractYouTubeId(videoUrl);
@@ -327,17 +321,14 @@ export default function VideoAnalysis({ currentVideo, setCurrentVideo, addToHist
     setLoading(true);
 
     try {
-      // Get title
       const res   = await fetch(`https://noembed.com/embed?url=https://www.youtube.com/watch?v=${id}`);
       const data  = await res.json();
       const title = data.title || "Untitled Video";
       setVideoTitle(title);
-
-      // Fetch transcript in browser (user's IP — not Azure's)
       setError("");
       const transcript = await fetchYouTubeTranscript(id);
       if (transcript && transcript.length > 0) {
-        // Send transcript text to backend — no YouTube call needed server-side
+        
         const ingestRes = await fetch(`${API}/ingest_text`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -346,7 +337,7 @@ export default function VideoAnalysis({ currentVideo, setCurrentVideo, addToHist
         if (!ingestRes.ok) {
           const errData = await ingestRes.json().catch(() => ({}));
           console.warn("ingest_text failed:", errData);
-          // Non-fatal: vectorstore might already exist
+         
         }
       } else {
         setWarnMsg("Could not fetch transcript automatically. Answers may be limited.");
@@ -361,8 +352,6 @@ export default function VideoAnalysis({ currentVideo, setCurrentVideo, addToHist
       setLoading(false);
     }
   };
-
-  /* Media upload */
   const handleMediaUpload = async (file) => {
     if (!file) return;
     const ext = "." + file.name.split(".").pop().toLowerCase();
@@ -384,7 +373,6 @@ export default function VideoAnalysis({ currentVideo, setCurrentVideo, addToHist
     finally { setLoading(false); }
   };
 
-  /* DOCX upload */
   const handleDocxUpload = async (file) => {
     if (!file) return;
     const ext = "." + file.name.split(".").pop().toLowerCase();
@@ -423,7 +411,7 @@ export default function VideoAnalysis({ currentVideo, setCurrentVideo, addToHist
 
   return (
     <div className="page-grid">
-      {/* Load panel */}
+    
       <div className="card">
         <div className="flex items-center justify-between mb-12">
           <div className="subheading">Load content</div>
@@ -432,7 +420,7 @@ export default function VideoAnalysis({ currentVideo, setCurrentVideo, addToHist
             onClick={() => setShowKeyModal(true)}
             style={{ fontSize: 12, gap: 5, display: "flex", alignItems: "center" }}
           >
-            {groqKey ? "⚡ AI Ready" : "🔑 Add API Key"}
+            {groqKey ? " LLM Ready" : "🔑 Add API Key"}
           </button>
         </div>
 

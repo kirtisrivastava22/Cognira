@@ -1,8 +1,3 @@
-"""
-All metadata now stored in SQLite via app.database.
-File I/O only for actual media files.
-"""
-
 import os
 import uuid
 import subprocess
@@ -27,7 +22,6 @@ def is_youtube_url(url: str) -> bool:
 
 
 def download_from_url(url: str, media_id: str) -> Tuple[str, str]:
-    """Returns (local_path, source_type)."""
     out_dir = MEDIA_DIR / media_id
     out_dir.mkdir(parents=True, exist_ok=True)
 
@@ -71,7 +65,7 @@ def save_uploaded_file(file_obj, media_id: str) -> str:
 
 
 def extract_audio(media_path: str, media_id: str) -> str:
-    """Convert video/audio to 16kHz mono WAV for Whisper."""
+    # Convert video/audio to 16kHz mono WAV for Whisper
     out_dir    = MEDIA_DIR / media_id
     out_dir.mkdir(parents=True, exist_ok=True)
     audio_path = out_dir / "audio.wav"
@@ -88,10 +82,8 @@ def extract_audio(media_path: str, media_id: str) -> str:
 
 
 def register_media(media_id: str, meta: dict):
-    """Persist media metadata to SQLite."""
     save_media(meta)
 
 
 def get_media_meta(media_id: str) -> Optional[dict]:
-    """Retrieve media metadata from SQLite."""
     return get_media(media_id)

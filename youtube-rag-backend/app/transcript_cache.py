@@ -1,7 +1,3 @@
-"""
-Transcript caching via SQLite (app.database).
-File-based JSON cache is retained as fallback for migration compatibility.
-"""
 
 import json
 import os
@@ -12,7 +8,6 @@ from app.database import save_transcript_db, load_transcript_db
 
 log = logging.getLogger("transcript_cache")
 
-# Legacy file cache path (kept for migration only)
 CACHE_DIR = "cache/transcripts"
 os.makedirs(CACHE_DIR, exist_ok=True)
 
@@ -22,12 +17,12 @@ def transcript_cache_path(video_id: str) -> str:
 
 
 def load_cached_transcript(video_id: str) -> Optional[list]:
-    # 1. Try DB first
+    #  Try DB first
     result = load_transcript_db(video_id)
     if result:
         return result
 
-    # 2. Fallback: legacy JSON file (migrate it into DB)
+    # Fallback: legacy JSON file 
     path = transcript_cache_path(video_id)
     if os.path.exists(path):
         try:
@@ -44,7 +39,6 @@ def load_cached_transcript(video_id: str) -> Optional[list]:
 
 
 def save_transcript(video_id: str, transcript: list):
-    """Save to DB (primary) and legacy file (backup)."""
     save_transcript_db(video_id, transcript)
 
     # Also write legacy file as backup

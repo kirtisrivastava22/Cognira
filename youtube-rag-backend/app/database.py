@@ -13,9 +13,6 @@ from pymongo.collection import Collection
 
 log = logging.getLogger("database")
 
-# ─────────────────────────────────────────────────────────────────────────────
-# Connection
-# ─────────────────────────────────────────────────────────────────────────────
 
 _MONGO_URI = os.getenv("MONGODB_URI", "mongodb://localhost:27017/cognira")
 _client: Optional[MongoClient] = None
@@ -40,10 +37,6 @@ SESSION_TTL_DAYS = 30
 MAX_FAILED_TRIES = 10
 LOCK_MINUTES     = 15
 
-
-# ─────────────────────────────────────────────────────────────────────────────
-# Init  (called on startup — creates indexes)
-# ─────────────────────────────────────────────────────────────────────────────
 
 def init_db():
     try:
@@ -70,10 +63,6 @@ def init_db():
         raise
 
 
-# ─────────────────────────────────────────────────────────────────────────────
-# Password helpers
-# ─────────────────────────────────────────────────────────────────────────────
-
 def hash_password(plaintext: str) -> str:
     return bcrypt.hashpw(plaintext.encode(), bcrypt.gensalt(rounds=12)).decode()
 
@@ -84,10 +73,6 @@ def verify_password(plaintext: str, hashed: str) -> bool:
     except Exception:
         return False
 
-
-# ─────────────────────────────────────────────────────────────────────────────
-# User CRUD
-# ─────────────────────────────────────────────────────────────────────────────
 
 def _uid_for_email(email: str) -> str:
     import hashlib
@@ -172,10 +157,6 @@ def get_user_by_id(user_id: str) -> Optional[dict]:
     return {"user_id": rec["user_id"], "name": rec["name"], "email": rec["email"]}
 
 
-# ─────────────────────────────────────────────────────────────────────────────
-# Server-side sessions  (opaque token stored in MongoDB)
-# ─────────────────────────────────────────────────────────────────────────────
-
 def create_session_token(user_id: str) -> str:
     token   = secrets.token_urlsafe(48)
     expires = datetime.now(timezone.utc) + timedelta(days=SESSION_TTL_DAYS)
@@ -207,13 +188,8 @@ def revoke_session_token(token: str):
 
 
 def purge_expired_sessions():
-    # MongoDB TTL index handles expiry automatically; manual purge for revoked
     _col("sessions").delete_many({"revoked": True})
 
-
-# ─────────────────────────────────────────────────────────────────────────────
-# Media CRUD
-# ─────────────────────────────────────────────────────────────────────────────
 
 def save_media(meta: dict):
     _col("media").update_one(
@@ -230,11 +206,6 @@ def get_media(media_id: str) -> Optional[dict]:
     rec.pop("_id", None)
     return rec
 
-
-# ─────────────────────────────────────────────────────────────────────────────
-# Transcript CRUD
-# ─────────────────────────────────────────────────────────────────────────────
-
 def save_transcript_db(media_id: str, chunks: list[dict]):
     _col("transcripts").update_one(
         {"media_id": media_id},
@@ -248,12 +219,7 @@ def load_transcript_db(media_id: str) -> Optional[list[dict]]:
     return rec["chunks"] if rec else None
 
 
-# ─────────────────────────────────────────────────────────────────────────────
-# History CRUD
-# ─────────────────────────────────────────────────────────────────────────────
-
 def add_history(user_id: str, media_id: str, title: str, source_type: str):
-    # Upsert so the same video shows only once, updated to latest viewed_at
     _col("history").update_one(
         {"user_id": user_id, "media_id": media_id},
         {"$set": {
@@ -284,10 +250,6 @@ def get_history(user_id: str, limit: int = 50) -> list[dict]:
     return result
 
 
-# ─────────────────────────────────────────────────────────────────────────────
-# Conversation CRUD
-# ─────────────────────────────────────────────────────────────────────────────
-
 def _conv_to_dict(r: dict) -> dict:
     r = dict(r)
     r.pop("_id", None)
@@ -295,12 +257,6 @@ def _conv_to_dict(r: dict) -> dict:
     updated = r.get("updated_at")
     r["created_at"] = created.isoformat() if isinstance(created, datetime) else created
     r["updated_at"] = updated.isoformat() if isinstance(updated, datetime) else updated
-
-    # Conversation documents never stored their own source_type — only
-    # media_id. Without this, the frontend (VideoAnalysis.jsx) defaults
-    # every resumed conversation to "youtube" and tries to embed media_id
-    # as an 11-char YouTube video ID, even when it's actually a docx/upload
-    # hash. Resolve the real source_type from the media record instead.
     media = get_media(r["media_id"]) if r.get("media_id") else None
     r["source_type"] = media.get("source_type") if media else r.get("source_type", "youtube")
 

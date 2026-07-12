@@ -2,7 +2,6 @@ import { useParams, Link } from "react-router-dom";
 import { useEffect, useState } from "react";
 const API = process.env.REACT_APP_API_URL;
 
-// Reuse the same ref-rendering logic as AskQuestion
 const COMBINED_RE = /\[para(?:graph)?\s*(\d+)\]|\[(\d{1,2}):(\d{2})\]/gi;
 
 function renderAnswer(raw) {
@@ -15,10 +14,6 @@ function renderAnswer(raw) {
   });
 }
 
-/**
- * SharedConversation — public read-only view of a shared conversation.
- * Route: /shared/:token
- */
 export default function SharedConversation() {
   const { token } = useParams();
   const [data,    setData]    = useState(null);
@@ -95,7 +90,7 @@ export default function SharedConversation() {
         )}
       </div>
 
-      {/* CTA */}
+      {/* Call to action */}
       <div className="card" style={{ textAlign: "center" }}>
         <p className="body" style={{ marginBottom: 12 }}>
           Want to analyze your own content?

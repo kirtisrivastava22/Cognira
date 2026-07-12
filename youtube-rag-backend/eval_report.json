@@ -1,0 +1,452 @@
+{
+  "summary": {
+    "total_questions": 44,
+    "keyword_hit_rate": 0.932,
+    "confidence_match_rate": 0.841,
+    "avg_relevance_score": 0.605,
+    "corrective_retry_count": 4,
+    "avg_retrieval_latency_ms": 237.4
+  },
+  "results": [
+    {
+      "media_id": "41XDn81nR5c",
+      "question": "What does the content say about: An LLM processes retrieved documents one by one?",
+      "relevance_score": 0.0,
+      "corrected": false,
+      "hit": false,
+      "confident_ok": false,
+      "elapsed_ms": 476.4,
+      "retrieved_preview": "\u0915\u093f \u091f\u094d\u0930\u0938\u094d\u091f \u0926 \u0921\u0949\u0915\u094d\u092f\u0942\u092e\u0947\u0902\u091f\u094d\u0938 \u092c\u094d\u0932\u093e\u0907\u0902\u0921\u0932\u0940\u0964 \u0914\u0930 \u092a\u094d\u0930\u094b\u0938\u0947\u0938 \u0921\u0947\u091f\u093e \u0938\u0940\u0915\u094d\u0935\u0947\u0902\u0936\u093f\u092f\u0932\u0940 \u0935\u094d\u0939\u093f\u091a \u0907\u0928\u0947\u092c\u0932\u094d\u0938 \u0907\u0938\u0915\u094b \u0915\u0948\u0938\u0947 \u0907\u0902\u092a\u094d\u0932\u0940\u092e\u0947\u0902\u091f \u0915\u0930\u0928\u093e \u0939\u0948\u0964 \u091a\u0947\u0902\u091c \u0907\u0928 \u0926\u093f\u0938 \u0930\u093f\u092b\u093e\u0907\u0902\u0921 \u0935\u093e\u0932\u093e \u0915\u094b\u0921\u0964 \u0909\u0938\u0915\u0947 \u092c\u093e\u0926 \u092a\u0942\u0930\u0947 \u0906\u0930\u094d\u0915\u093f\u091f\u0947"
+    },
+    {
+      "media_id": "41XDn81nR5c",
+      "question": "What does the content say about: A system can retrieve multiple documents, such as d1 and d2?",
+      "relevance_score": 0.1,
+      "corrected": false,
+      "hit": false,
+      "confident_ok": false,
+      "elapsed_ms": 411.7,
+      "retrieved_preview": "\u0921\u0949\u0915\u094d\u092f\u0942\u092e\u0947\u0902\u091f\u094d\u0938 \u0930\u093f\u091f\u094d\u0930\u0940\u0935 \u0915\u0930\u0915\u0947 \u0926\u0947\u0924\u093e \u0939\u0948 d1 \u0914\u0930 \u0932\u093e\u0907\u092c\u094d\u0930\u0947\u0930\u0940\u095b \u0907\u0902\u092a\u094b\u0930\u094d\u091f \u0915\u0940\u0964 \u092f\u0939\u0940\u0902 \u092a\u0947 \u0939\u092e\u0928\u0947 \u0924\u0940\u0928 \u091f\u094d\u0930\u0942 \u091f\u0942 \u0926 \u092a\u0947\u092a\u0930 \u0915\u094b\u0921 \u0932\u093f\u0916\u093e \u0939\u0948\u0964 \u0911\u092c\u094d\u0935\u093f\u092f\u0938\u0932\u0940 \u0917\u092f\u093e\u0964 \u0907\u0928\u092b\u0948\u0915\u094d\u091f \u0921\u093f\u0938\u094d\u0915\u0938 \u0939\u0940 \u0928\u0939\u0940\u0902 \u0915\u093f\u092f\u093e \u0917\u092f\u093e \u0939\u0948\u0964 \u0915"
+    },
+    {
+      "media_id": "41XDn81nR5c",
+      "question": "What does the content say about: A failed node is also referred to as an ambiguous node?",
+      "relevance_score": 0.0,
+      "corrected": false,
+      "hit": false,
+      "confident_ok": false,
+      "elapsed_ms": 430.7,
+      "retrieved_preview": "\u0930\u093f\u091c\u0932\u094d\u091f \u0907\u0928\u0915\u0930\u0947\u0915\u094d\u091f \u0939\u0948\u0964 \u0935\u0940 \u0935\u093f\u0932 \u0928\u0949\u091f \u0921\u0942 \u090f\u0928\u0940 \u0935\u091c\u0939 \u0938\u0947 \u0926\u093f\u0938 \u0907\u095b \u0926 \u0906\u0909\u091f\u092a\u0941\u091f \u0926\u0948\u091f \u0935\u0940 \u0906\u0930 \u0917\u0947\u091f\u093f\u0902\u0917\u0964 \u0915\u094d\u0930\u093e\u0907\u091f\u0947\u0930\u093f\u092f\u093e \u0915\u094d\u092f\u093e \u0939\u0948? \u0928\u094b \u0921\u0949\u0915\u094d\u092f\u0942\u092e\u0947\u0902\u091f \u0938\u094d\u091f\u094d\u0930\u0915\u094d\u091a\u0930 \u0911\u092b \u0906\u0935\u0930 \u0917\u094d\u0930\u093e\u092b\u0964 \u0905 \u0938\u094b \u0930\u093f\u091f\u094d\u0930\u0940\u0935\u0932 \u0915\u093e \u091a\u0947\u0902\u091c "
+    },
+    {
+      "media_id": "qcALGDn0zpk",
+      "question": "What does the content say about: The World Wide Web uses the Hypertext Transfer Protocol (HTTP) as its ?",
+      "relevance_score": 0.667,
+      "corrected": false,
+      "hit": true,
+      "confident_ok": true,
+      "elapsed_ms": 212.6,
+      "retrieved_preview": "http or hypertext transfer protocol is\u00a0 the application layer protocol that is and university students. it was not popular\u00a0 among the general public. the intern"
+    },
+    {
+      "media_id": "qcALGDn0zpk",
+      "question": "What does the content say about: The Internet initially had limited usage among researchers, academics,?",
+      "relevance_score": 0.5,
+      "corrected": false,
+      "hit": true,
+      "confident_ok": true,
+      "elapsed_ms": 182.6,
+      "retrieved_preview": "initially, the internet was primarily\u00a0 used by researchers, academics, this response message has six header\u00a0 lines. the first one is connection: need not adjust"
+    },
+    {
+      "media_id": "qcALGDn0zpk",
+      "question": "What does the content say about: A website is a collection of web pages?",
+      "relevance_score": 0.667,
+      "corrected": false,
+      "hit": true,
+      "confident_ok": true,
+      "elapsed_ms": 186.8,
+      "retrieved_preview": "page. a collection of web pages makes\u00a0 a website. for example, wikipedia. now, let us discuss, http response message consider this as the response message book "
+    },
+    {
+      "media_id": "qcALGDn0zpk",
+      "question": "What does the content say about: HTTP or HyperText Transfer Protocol is the application layer protocol?",
+      "relevance_score": 0.75,
+      "corrected": false,
+      "hit": true,
+      "confident_ok": true,
+      "elapsed_ms": 222.0,
+      "retrieved_preview": "http or hypertext transfer protocol is\u00a0 the application layer protocol that is in the last video, we discussed - network\u00a0 applications - in detail. in this vide"
+    },
+    {
+      "media_id": "qcALGDn0zpk",
+      "question": "What does the content say about: A client and server exchange data in the form of HTTP messages?",
+      "relevance_score": 0.667,
+      "corrected": false,
+      "hit": true,
+      "confident_ok": true,
+      "elapsed_ms": 214.5,
+      "retrieved_preview": "pair between the client and the server are\u00a0 transferred in the form of http messages. when we open a web page on a web browser, we\u00a0 see that it contains some te"
+    },
+    {
+      "media_id": "qcALGDn0zpk",
+      "question": "What does the content say about: HTTP uses TCP as its underlying transport protocol?",
+      "relevance_score": 0.6,
+      "corrected": false,
+      "hit": true,
+      "confident_ok": true,
+      "elapsed_ms": 198.0,
+      "retrieved_preview": "underlying transport protocol. since\u00a0 tcp is a connection-oriented protocol, when we open a web page on a web browser, we\u00a0 see that it contains some text, image"
+    },
+    {
+      "media_id": "qcALGDn0zpk",
+      "question": "What does the content say about: TCP is a connection-oriented protocol?",
+      "relevance_score": 0.667,
+      "corrected": false,
+      "hit": true,
+      "confident_ok": true,
+      "elapsed_ms": 188.2,
+      "retrieved_preview": "underlying transport protocol. since\u00a0 tcp is a connection-oriented protocol, when we open a web page on a web browser, we\u00a0 see that it contains some text, image"
+    },
+    {
+      "media_id": "qcALGDn0zpk",
+      "question": "What does the content say about: A URL can be absolute or relative?",
+      "relevance_score": 0.833,
+      "corrected": false,
+      "hit": true,
+      "confident_ok": true,
+      "elapsed_ms": 195.7,
+      "retrieved_preview": "called absolute urls. on the other hand, urls\u00a0 having only a path are called relative urls. now, let us discuss, http response message consider this as the resp"
+    },
+    {
+      "media_id": "qcALGDn0zpk",
+      "question": "What does the content say about: Absolute URLs contain protocol, domain, and path?",
+      "relevance_score": 0.625,
+      "corrected": false,
+      "hit": true,
+      "confident_ok": true,
+      "elapsed_ms": 206.3,
+      "retrieved_preview": "in this url, we have protocol, domai, and path.\u00a0 urls having protocol, domain, and path are popularity after the arrival of the most popular\u00a0 network applicatio"
+    },
+    {
+      "media_id": "qcALGDn0zpk",
+      "question": "What does the content say about: Relative URLs contain only a path?",
+      "relevance_score": 0.714,
+      "corrected": false,
+      "hit": true,
+      "confident_ok": true,
+      "elapsed_ms": 197.5,
+      "retrieved_preview": "called absolute urls. on the other hand, urls\u00a0 having only a path are called relative urls. this response message has six header\u00a0 lines. the first one is connec"
+    },
+    {
+      "media_id": "qcALGDn0zpk",
+      "question": "What does the content say about: The PUT method is used to upload an object to a specific directory on ?",
+      "relevance_score": 0.778,
+      "corrected": false,
+      "hit": true,
+      "confident_ok": true,
+      "elapsed_ms": 204.6,
+      "retrieved_preview": "put method is used to upload an object\u00a0 to a specific directory on a server. that the web page has 6 objects. web pages\u00a0 are written in html language. the html "
+    },
+    {
+      "media_id": "qcALGDn0zpk",
+      "question": "What does the content say about: The DELETE method is used to delete objects from the server?",
+      "relevance_score": 0.875,
+      "corrected": false,
+      "hit": true,
+      "confident_ok": true,
+      "elapsed_ms": 195.5,
+      "retrieved_preview": "delete method is used to delete\u00a0 objects from the server. created or last modified in the server. content-length: header line indicates the hands of tcp. now, o"
+    },
+    {
+      "media_id": "qcALGDn0zpk",
+      "question": "What does the content say about: The Connection: close header tells the web server that it can close th?",
+      "relevance_score": 0.8,
+      "corrected": false,
+      "hit": true,
+      "confident_ok": true,
+      "elapsed_ms": 200.0,
+      "retrieved_preview": "close: with this header line, the\u00a0 web server tells the web browser hands of tcp. now, one of the services of tcp is\u00a0 \u201creliable data transfer\u201d. we discussed thi"
+    },
+    {
+      "media_id": "qcALGDn0zpk",
+      "question": "What does the content say about: The HTTP response message has six header lines?",
+      "relevance_score": 0.889,
+      "corrected": false,
+      "hit": true,
+      "confident_ok": true,
+      "elapsed_ms": 180.7,
+      "retrieved_preview": "this response message has six header\u00a0 lines. the first one is connection: the http version field stores the http\u00a0 version a web browser implements. in or videos"
+    },
+    {
+      "media_id": "qcALGDn0zpk",
+      "question": "What does the content say about: The Connection: close header line indicates the web server will close ?",
+      "relevance_score": 0.7,
+      "corrected": false,
+      "hit": true,
+      "confident_ok": true,
+      "elapsed_ms": 172.0,
+      "retrieved_preview": "close: with this header line, the\u00a0 web server tells the web browser that it will close the tcp connection\u00a0 after sending the response message. in the last video"
+    },
+    {
+      "media_id": "qcALGDn0zpk",
+      "question": "What does the content say about: The Server: header line indicates the web server generating the respon?",
+      "relevance_score": 0.778,
+      "corrected": false,
+      "hit": true,
+      "confident_ok": true,
+      "elapsed_ms": 194.4,
+      "retrieved_preview": "created or last modified in the server. content-length: header line indicates the here, the client is a device which\u00a0 requests web pages, and the server is serv"
+    },
+    {
+      "media_id": "GhX8sNyFo5w",
+      "question": "What does the content say about: APIs and SDKs are used to build features in modern apps?",
+      "relevance_score": 0.556,
+      "corrected": true,
+      "hit": true,
+      "confident_ok": true,
+      "elapsed_ms": 368.6,
+      "retrieved_preview": "build apps with specific platforms like that's where apis and sdks come in they building features and sdk is a complete gears to sdks software development kits "
+    },
+    {
+      "media_id": "GhX8sNyFo5w",
+      "question": "What does the content say about: Modern apps process payments, send notifications, and display maps?",
+      "relevance_score": 0.7,
+      "corrected": true,
+      "hit": true,
+      "confident_ok": true,
+      "elapsed_ms": 382.6,
+      "retrieved_preview": "notifications and show maps and that's need to process payments send modern apps are incredibly complex they app's own api fetches the restaurant's a service po"
+    },
+    {
+      "media_id": "GhX8sNyFo5w",
+      "question": "What does the content say about: HTTP requests include GET, POST, PUT, and DELETE operations?",
+      "relevance_score": 0.6,
+      "corrected": false,
+      "hit": true,
+      "confident_ok": true,
+      "elapsed_ms": 208.1,
+      "retrieved_preview": "it's a way of communicating through http update existing ones and delete while requests we can include specific they format requests properly they turn world se"
+    },
+    {
+      "media_id": "GhX8sNyFo5w",
+      "question": "What does the content say about: GET fetches data from a service?",
+      "relevance_score": 0.714,
+      "corrected": false,
+      "hit": true,
+      "confident_ok": true,
+      "elapsed_ms": 191.3,
+      "retrieved_preview": "beautifully simple get fetches data from world services use api keys or o off status code that tells us what happened a service post creates new resources put a"
+    },
+    {
+      "media_id": "GhX8sNyFo5w",
+      "question": "What does the content say about: POST creates new resources?",
+      "relevance_score": 0.833,
+      "corrected": false,
+      "hit": true,
+      "confident_ok": true,
+      "elapsed_ms": 161.3,
+      "retrieved_preview": "a service post creates new resources put remember it's not always an either or readers subscribe that blog. bio.com features from scratch would take years it co"
+    },
+    {
+      "media_id": "GhX8sNyFo5w",
+      "question": "What does the content say about: API keys are used to verify who's making requests?",
+      "relevance_score": 0.556,
+      "corrected": false,
+      "hit": true,
+      "confident_ok": true,
+      "elapsed_ms": 193.8,
+      "retrieved_preview": "tokens to verify who's making requests behind the scenes first a map api kicks are the essential tools that make a security is very important in the api softwar"
+    },
+    {
+      "media_id": "GhX8sNyFo5w",
+      "question": "What does the content say about: API services use tokens to verify requests?",
+      "relevance_score": 0.625,
+      "corrected": false,
+      "hit": true,
+      "confident_ok": true,
+      "elapsed_ms": 191.2,
+      "retrieved_preview": "tokens to verify who's making requests api use what's called rest architecture readers subscribe that blog. bio.com payment api steps in to handle our complicat"
+    },
+    {
+      "media_id": "GhX8sNyFo5w",
+      "question": "What does the content say about: SDKs are pre-built toolboxes that make API connections?",
+      "relevance_score": 0.667,
+      "corrected": false,
+      "hit": true,
+      "confident_ok": true,
+      "elapsed_ms": 192.1,
+      "retrieved_preview": "should we choose between an api and sdk just the beginning building all these a service post creates new resources put toolboxes that make those connection devi"
+    },
+    {
+      "media_id": "GhX8sNyFo5w",
+      "question": "What does the content say about: APIs are the raw connection points between services?",
+      "relevance_score": 0.625,
+      "corrected": false,
+      "hit": true,
+      "confident_ok": true,
+      "elapsed_ms": 181.4,
+      "retrieved_preview": "while apis are the raw connection points a service post creates new resources put api clients that make integration easy behind the scenes first a map api kicks"
+    },
+    {
+      "media_id": "GhX8sNyFo5w",
+      "question": "What does the content say about: An SDK manages authentication and formats requests?",
+      "relevance_score": 0.286,
+      "corrected": true,
+      "hit": true,
+      "confident_ok": false,
+      "elapsed_ms": 364.3,
+      "retrieved_preview": "platforms sdks are often the way to go access something without permission and format every api response comes with a tokens to verify who's making requests wit"
+    },
+    {
+      "media_id": "GhX8sNyFo5w",
+      "question": "What does the content say about: An SDK turns complicated responses into easy-to-use data?",
+      "relevance_score": 0.6,
+      "corrected": false,
+      "hit": true,
+      "confident_ok": true,
+      "elapsed_ms": 176.9,
+      "retrieved_preview": "complicated responses into data that's gears to sdks software development kits example instagram's sdk instead writing it covers topics and trends in large api "
+    },
+    {
+      "media_id": "GhX8sNyFo5w",
+      "question": "What does the content say about: SDKs come with best practices built in?",
+      "relevance_score": 0.75,
+      "corrected": false,
+      "hit": true,
+      "confident_ok": true,
+      "elapsed_ms": 204.7,
+      "retrieved_preview": "should we choose between an api and sdk with best practices built right in a service post creates new resources put that's where apis and sdks come in they buil"
+    },
+    {
+      "media_id": "GhX8sNyFo5w",
+      "question": "What does the content say about: SDKs help move products to market quickly?",
+      "relevance_score": 0.375,
+      "corrected": false,
+      "hit": true,
+      "confident_ok": false,
+      "elapsed_ms": 331.7,
+      "retrieved_preview": "product to market quickly they come pack platforms sdks are often the way to go it covers topics and trends in large complicated responses into data that's simp"
+    },
+    {
+      "media_id": "h7apO7q16V0",
+      "question": "What does the content say about: Graph algorithms include Depth-First Search (DFS) and Breadth-First Se?",
+      "relevance_score": 0.455,
+      "corrected": false,
+      "hit": true,
+      "confident_ok": false,
+      "elapsed_ms": 392.4,
+      "retrieved_preview": "graph algorithms like dfs or bfs different we'll take a discovery based set of initial endpoints has this if you want to see more content like evaluation and in"
+    },
+    {
+      "media_id": "h7apO7q16V0",
+      "question": "What does the content say about: Algorithms can be split into two distinct classes?",
+      "relevance_score": 0.556,
+      "corrected": false,
+      "hit": true,
+      "confident_ok": true,
+      "elapsed_ms": 184.8,
+      "retrieved_preview": "them the second class of algorithms we can often split them into two distinct requires splitting the polynomial into representation has a one-to-one mapping que"
+    },
+    {
+      "media_id": "h7apO7q16V0",
+      "question": "What does the content say about: There is exactly one quadratic function that goes through three given ?",
+      "relevance_score": 0.727,
+      "corrected": false,
+      "hit": true,
+      "confident_ok": true,
+      "elapsed_ms": 189.5,
+      "retrieved_preview": "quadratic function that goes through formula one standard way to define the there is exactly one cubic function that let's say we have a degree 3 polynomial spe"
+    },
+    {
+      "media_id": "h7apO7q16V0",
+      "question": "What does the content say about: There is exactly one cubic function that goes through four given point?",
+      "relevance_score": 0.75,
+      "corrected": false,
+      "hit": true,
+      "confident_ok": true,
+      "elapsed_ms": 183.2,
+      "retrieved_preview": "there is exactly one cubic function that the four points that we need to evaluate quadratic function that goes through plus one points such that n is the power "
+    },
+    {
+      "media_id": "h7apO7q16V0",
+      "question": "What does the content say about: Knowing the value of one point implies the value of another point?",
+      "relevance_score": 0.625,
+      "corrected": false,
+      "hit": true,
+      "confident_ok": true,
+      "elapsed_ms": 190.1,
+      "retrieved_preview": "any set of points when knowing the value this fact deserves a little bit more problem from another perspective is that what this means is we can define is the t"
+    },
+    {
+      "media_id": "h7apO7q16V0",
+      "question": "What does the content say about: If x = -1, then the value of the corresponding point is immediately kn?",
+      "relevance_score": 0.545,
+      "corrected": true,
+      "hit": true,
+      "confident_ok": true,
+      "elapsed_ms": 364.5,
+      "retrieved_preview": "any set of points when knowing the value positive x okay but then the next as the same fft function but now when n is equal to 1. all this means is link a nice "
+    },
+    {
+      "media_id": "h7apO7q16V0",
+      "question": "What does the content say about: If x = 2, then the value of the corresponding point is immediately kno?",
+      "relevance_score": 0.545,
+      "corrected": false,
+      "hit": true,
+      "confident_ok": true,
+      "elapsed_ms": 180.6,
+      "retrieved_preview": "immediately implies the value of another the coefficient of the kth index is only end up having n over two points x1 squared and x2 squared now the key we know "
+    },
+    {
+      "media_id": "h7apO7q16V0",
+      "question": "What does the content say about: A degree 3 polynomial requires at least 4 points to be defined?",
+      "relevance_score": 0.5,
+      "corrected": false,
+      "hit": true,
+      "confident_ok": true,
+      "elapsed_ms": 179.9,
+      "retrieved_preview": "let's say we have a degree 3 polynomial the four points that we need to evaluate points of a d degree polynomial p of x coefficients and consequently function o"
+    },
+    {
+      "media_id": "h7apO7q16V0",
+      "question": "What does the content say about: Omega is defined as e to the power i over n?",
+      "relevance_score": 0.8,
+      "corrected": false,
+      "hit": true,
+      "confident_ok": true,
+      "elapsed_ms": 185.3,
+      "retrieved_preview": "we will define omega as e to the power is the complex number i which means that almost the same as our original dft is now just replaced with omega to the omega"
+    },
+    {
+      "media_id": "h7apO7q16V0",
+      "question": "What does the content say about: A polynomial can be represented as a degree n minus one polynomial whe?",
+      "relevance_score": 0.455,
+      "corrected": false,
+      "hit": true,
+      "confident_ok": false,
+      "elapsed_ms": 377.5,
+      "retrieved_preview": "have an n minus one degree polynomial representation of our polynomial and we that the polynomial will have positive squared they are polynomials of degree requ"
+    },
+    {
+      "media_id": "h7apO7q16V0",
+      "question": "What does the content say about: The Discrete Fourier Transform (DFT) is a matrix in most textbooks?",
+      "relevance_score": 0.667,
+      "corrected": false,
+      "hit": true,
+      "confident_ok": true,
+      "elapsed_ms": 206.1,
+      "retrieved_preview": "or dft matrix in most textbooks and is the fast fourier transform let's the fft will take in a coefficient the reason this works is due to the is the two-point "
+    },
+    {
+      "media_id": "h7apO7q16V0",
+      "question": "What does the content say about: The FFT is an algorithm for calculating DFT matrix-vector products eff?",
+      "relevance_score": 0.5,
+      "corrected": false,
+      "hit": true,
+      "confident_ok": true,
+      "elapsed_ms": 193.3,
+      "retrieved_preview": "the fft at its core is an algorithm for coefficient representation of degree d as a matrix vector product it helps to arrange our coefficients in fourier transf"
+    }
+  ]
+}

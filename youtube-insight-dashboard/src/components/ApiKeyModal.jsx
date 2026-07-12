@@ -1,13 +1,5 @@
 import React, { useState } from "react";
 
-/**
- * ApiKeyModal — lets users store their own Groq API key in localStorage.
- * The key never leaves the browser — all LLM calls go directly to Groq.
- *
- * Props:
- *   onClose  – () => void
- *   onSaved  – (key: string) => void
- */
 export default function ApiKeyModal({ onClose, onSaved }) {
   const [key,     setKey]     = useState(localStorage.getItem("groq_api_key") || "");
   const [showKey, setShowKey] = useState(false);
