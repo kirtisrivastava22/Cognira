@@ -263,7 +263,7 @@ def _conv_to_dict(r: dict) -> dict:
     return r
 
 
-def create_conversation(user_id: str, media_id: str, title: str = "New conversation") -> dict:
+def create_conversation(user_id: str, media_id: str, title: str = "New conversation") -> Optional[dict]:
     conv_id = secrets.token_hex(16)
     now     = datetime.now(timezone.utc)
     doc = {

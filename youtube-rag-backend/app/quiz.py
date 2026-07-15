@@ -202,7 +202,8 @@ def _generate_question(
                 item = content[0]
                 raw = json.dumps(item) if not isinstance(item, str) else item.strip()
             elif all(isinstance(item, str) for item in content):
-                raw = " ".join(item.strip() for item in content).strip()
+                strings = [item for item in content if isinstance(item, str)]
+                raw = " ".join(item.strip() for item in strings).strip()
             else:
                 raw = json.dumps(content)
         else:

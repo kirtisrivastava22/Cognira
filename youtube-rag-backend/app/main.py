@@ -745,6 +745,9 @@ def ingest_text(req: IngestTextRequest):
     save_transcript(req.video_id, [{"text": d.page_content, "start": d.metadata["start"]} for d in docs])
 
     chunks = split_documents(docs)
+    if chunks is None:
+        raise HTTPException(status_code=500, detail="Transcript chunking failed.")
+
     try:
         get_or_create_vectorstore(req.video_id, docs_builder=lambda _: chunks)
     except Exception as e:
