@@ -1,4 +1,3 @@
-
 import json
 import os
 import logging
@@ -48,3 +47,4 @@ def save_transcript(video_id: str, transcript: list):
             json.dump(transcript, f, ensure_ascii=False)
     except Exception as e:
         log.warning("Could not write legacy transcript file %s: %s", video_id, e)
+        

@@ -255,10 +255,7 @@ def _llm_title_for_bucket(bucket: dict, idx: int, ref_type: str = "video") -> Ch
         key_topics = key_topics,
     )
 
-
-# ─────────────────────────────────────────────────────────────────────────────
 # Public API
-# ─────────────────────────────────────────────────────────────────────────────
 
 def detect_chapters_from_docs(
     docs:         list[Document],
